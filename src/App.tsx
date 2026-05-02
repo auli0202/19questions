@@ -60,17 +60,29 @@ const LibraryIcon = ({ size = 20 }: { size?: number }) => (
   </svg>
 );
 
+const FalconLogo = ({ size = 32, className = "" }: { size?: number, className?: string }) => (
+  <svg 
+    width={size} 
+    height={size} 
+    viewBox="0 0 640 640" 
+    className={className}
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path fill="currentColor" d="M544 160C544 124.7 515.3 96 480 96L160 96C124.7 96 96 124.7 96 160L96 480C96 515.3 124.7 544 160 544L480 544C515.3 544 544 515.3 544 480L544 160zM352 216C352 229.3 341.3 240 328 240L216 240C202.7 240 192 229.3 192 216C192 202.7 202.7 192 216 192L328 192C341.3 192 352 202.7 352 216zM424 296C437.3 296 448 306.7 448 320C448 333.3 437.3 344 424 344L216 344C202.7 344 192 333.3 192 320C192 306.7 202.7 296 216 296L424 296zM288 424C288 437.3 277.3 448 264 448L216 448C202.7 448 192 437.3 192 424C192 410.7 202.7 400 216 400L264 400C277.3 400 288 410.7 288 424z"/>
+  </svg>
+);
+
 function LoginPage({ onSignIn }: { onSignIn: () => void }) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4">
       <div className="max-w-md w-full bg-white dark:bg-slate-900 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 shadow-2xl shadow-blue-500/10">
         <div className="text-center space-y-6">
           <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-blue-600 text-white shadow-xl shadow-blue-500/30 mb-2">
-            <BookOpen size={40} />
+            <FalconLogo size={48} />
           </div>
           <div className="space-y-2">
-            <h1 className="text-3xl font-black text-slate-800 dark:text-white">Start Learning</h1>
-            <p className="text-slate-500 dark:text-slate-400 font-medium">Log in to sync your progress and saved proverbs across devices.</p>
+            <h1 className="text-4xl font-black tracking-tight text-slate-800 dark:text-white">19questions</h1>
+            <p className="text-slate-500 dark:text-slate-400 font-medium">Master language with precision.</p>
           </div>
           
           <button 
@@ -685,14 +697,6 @@ function ProverbsView({
             }}
             className="bg-white dark:bg-slate-900 rounded-[32px] border-2 border-slate-100 dark:border-slate-800 p-8 md:p-12 shadow-2xl shadow-blue-500/5 flex flex-col items-center text-center space-y-6 relative overflow-hidden cursor-grab active:cursor-grabbing touch-none"
           >
-              <button 
-                onClick={(e) => { e.stopPropagation(); speak(current.proverbEn); }}
-                className="absolute top-5 right-5 w-10 h-10 flex items-center justify-center bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-700 transition-all shadow-sm z-20 active:scale-90"
-                title="Pronounce English"
-              >
-                <Volume2 size={20} />
-              </button>
-
               <div className="absolute top-0 right-0 p-8 opacity-5">
                 <Sparkles size={100} />
               </div>
@@ -714,6 +718,18 @@ function ProverbsView({
               </div>
 
               <div className="pt-4 flex items-center justify-center gap-2">
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    triggerHapticFeedback('light');
+                    speak(current.proverbEn);
+                  }}
+                  className="flex items-center justify-center w-11 h-11 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-400 hover:text-blue-500 hover:border-blue-500 transition-all shadow-sm active:scale-95"
+                  title="Pronounce English"
+                >
+                  <Volume2 size={18} />
+                </button>
+
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
@@ -1298,14 +1314,14 @@ export default function App() {
             "flex items-center justify-between bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/50 sticky top-0 z-50 w-full transition-all duration-300",
             "h-16 md:h-20 px-4 md:px-12 shadow-sm"
           )}>
-            <button 
+             <button 
               onClick={() => setView('dash')}
-              className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+              className="flex items-center gap-2 hover:opacity-80 transition-all active:scale-95 group"
             >
-               <div className={cn(
-                 "bg-blue-600 rounded-lg flex items-center justify-center text-white font-black shadow-md shadow-blue-500/20 transition-all duration-300 px-2",
-                 "h-8 md:h-9 text-[14px] md:text-[16px]"
-               )}>19question</div>
+               <div className="bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-500/20 w-9 h-9 md:w-10 md:h-10 transition-transform group-hover:rotate-6">
+                 <FalconLogo size={24} />
+               </div>
+               <span className="font-black text-xl md:text-2xl tracking-tighter text-slate-900 dark:text-white">19questions</span>
             </button>
             
             <nav className="hidden md:flex items-center gap-1">
@@ -2503,23 +2519,26 @@ function FlashcardSession({
             </div>
           </div>
           {/* Back */}
-    <div className="absolute inset-0 bg-white dark:bg-slate-900 rounded-[32px] border-2 border-blue-500 flex flex-col items-center justify-center p-6 [transform:rotateY(180deg)] [backface-visibility:hidden] shadow-xl">
-      <div className="absolute top-6 right-8">
+    <div className="absolute inset-0 bg-white dark:bg-slate-900 rounded-[32px] border-2 border-blue-500 flex flex-col items-center justify-center p-6 [transform:rotateY(180deg)] [backface-visibility:hidden] shadow-xl overflow-hidden">
+      <div className="absolute top-4 right-4 z-20">
         <button 
           onClick={(e) => { e.stopPropagation(); speak(current.answer); }}
-          className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400 hover:scale-110 transition active:scale-95"
+          className="p-2.5 bg-blue-50 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400 hover:scale-110 transition active:scale-95 border border-blue-100 dark:border-blue-800/50"
+          title="Pronounce"
         >
-          <Volume2 size={24} />
+          <Volume2 size={20} />
         </button>
       </div>
-      <h2 
-        className="font-bengali text-blue-600 dark:text-blue-500 mb-8 text-center leading-relaxed"
-        style={{ fontSize: fontSize + 8 }}
-      >
-        {current.answer}
-      </h2>
-            
-            <div className="grid grid-cols-2 gap-3 w-full max-w-[320px] mb-6">
+      
+      <div className="w-full h-full flex flex-col items-center justify-center p-4">
+        <h2 
+          className="font-bengali text-blue-600 dark:text-blue-500 mb-8 text-center leading-relaxed"
+          style={{ fontSize: fontSize + 4 }}
+        >
+          {current.answer}
+        </h2>
+              
+        <div className="grid grid-cols-2 gap-3 w-full max-w-[320px] mb-2">
               <button 
                 onClick={(e) => { e.stopPropagation(); searchGoogle(current.question + ' explain in Bangla'); }}
                 className="flex items-center justify-center gap-2 px-3 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-2xl text-[10px] font-bold hover:bg-blue-500 hover:text-white transition active:scale-95 shadow-sm text-slate-600 dark:text-slate-300"
@@ -2573,6 +2592,7 @@ function FlashcardSession({
           </div>
         </div>
       </div>
+    </div>
 
       <div className="hidden sm:flex justify-between items-center px-4 pt-4">
         <button 

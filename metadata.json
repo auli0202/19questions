@@ -1,5 +1,5 @@
 {
-  "name": "19question",
+  "name": "19questions",
   "description": "A comprehensive vocabulary builder and quiz application powered by your custom Google Sheet data.",
   "requestFramePermissions": [],
   "majorCapabilities": []
