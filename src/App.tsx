@@ -2496,103 +2496,130 @@ function FlashcardSession({
       </div>
 
       <div className="relative h-[400px] sm:h-[420px] lg:h-[480px] [perspective:1000px]">
-        <div 
-          className="relative w-full h-full [transform-style:preserve-3d] cursor-pointer transition-transform duration-500"
-          style={{ transform: `rotateY(${flipped ? 180 : 0}deg)` }}
-          onClick={() => {
-            const selection = window.getSelection();
-            if (selection && selection.toString().length > 0) return;
-            setFlipped(!flipped);
-          }}
-        >
-          {/* Front */}
-          <div className="absolute inset-0 bg-white dark:bg-slate-900 rounded-[32px] border-2 border-slate-100 dark:border-slate-800 flex flex-col items-center justify-center p-8 backface-hidden [backface-visibility:hidden] shadow-sm">
-            <span className="text-[10px] font-black uppercase text-blue-500 mb-6 tracking-widest px-3 py-1 bg-blue-50 dark:bg-blue-900/30 rounded-full">{current.category}</span>
-            <h2 
-              className="font-black text-center break-words leading-tight text-slate-900 dark:text-slate-200"
-              style={{ fontSize: fontSize }}
+        <AnimatePresence mode="wait">
+          <motion.div 
+            key={idx}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.7}
+            onDragEnd={(_, info) => {
+              if (info.offset.x < -100) {
+                triggerHapticFeedback('light');
+                handleNext();
+              } else if (info.offset.x > 100) {
+                triggerHapticFeedback('light');
+                handlePrev();
+              }
+            }}
+            className="relative w-full h-full [transform-style:preserve-3d] cursor-pointer touch-none"
+            style={{ transformStyle: "preserve-3d" }}
+          >
+            <motion.div
+              className="w-full h-full relative"
+              initial={false}
+              animate={{ rotateY: flipped ? 180 : 0 }}
+              transition={{ type: "spring", stiffness: 260, damping: 20 }}
+              style={{ transformStyle: "preserve-3d" }}
+              onClick={(e) => {
+                const selection = window.getSelection();
+                if (selection && selection.toString().length > 0) return;
+                setFlipped(!flipped);
+              }}
             >
-              {current.question}
-            </h2>
-            <div className="mt-10 flex flex-col items-center gap-2">
-              <span className="text-[10px] uppercase tracking-widest font-bold text-slate-300 dark:text-slate-600">Tap to flip • Swipe to navigate</span>
-            </div>
-          </div>
-          {/* Back */}
-    <div className="absolute inset-0 bg-white dark:bg-slate-900 rounded-[32px] border-2 border-blue-500 flex flex-col items-center justify-center p-6 [transform:rotateY(180deg)] [backface-visibility:hidden] shadow-xl overflow-hidden">
-      <div className="absolute top-4 right-4 z-20">
-        <button 
-          onClick={(e) => { e.stopPropagation(); speak(current.answer); }}
-          className="p-2.5 bg-blue-50 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400 hover:scale-110 transition active:scale-95 border border-blue-100 dark:border-blue-800/50"
-          title="Pronounce"
-        >
-          <Volume2 size={20} />
-        </button>
-      </div>
-      
-      <div className="w-full h-full flex flex-col items-center justify-center p-4">
-        <h2 
-          className="font-bengali text-blue-600 dark:text-blue-500 mb-8 text-center leading-relaxed"
-          style={{ fontSize: fontSize + 4 }}
-        >
-          {current.answer}
-        </h2>
-              
-        <div className="grid grid-cols-2 gap-3 w-full max-w-[320px] mb-2">
-              <button 
-                onClick={(e) => { e.stopPropagation(); searchGoogle(current.question + ' explain in Bangla'); }}
-                className="flex items-center justify-center gap-2 px-3 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-2xl text-[10px] font-bold hover:bg-blue-500 hover:text-white transition active:scale-95 shadow-sm text-slate-600 dark:text-slate-300"
-              >
-                <Search size={14} /> Google
-              </button>
-              <button 
-                onClick={(e) => { e.stopPropagation(); searchChatGPT(current.question + ' explain in Bangla'); }}
-                className="flex items-center justify-center gap-2 px-3 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-2xl text-[10px] font-bold hover:bg-slate-900 hover:text-white transition active:scale-95 shadow-sm text-slate-600 dark:text-slate-300"
-              >
-                <MessageSquare size={14} /> ChatGPT
-              </button>
-            </div>
+              {/* Front */}
+              <div className="absolute inset-0 bg-white dark:bg-slate-900 rounded-[32px] border-2 border-slate-100 dark:border-slate-800 flex flex-col items-center justify-center p-8 backface-hidden [backface-visibility:hidden] shadow-sm">
+                <span className="text-[10px] font-black uppercase text-blue-500 mb-6 tracking-widest px-3 py-1 bg-blue-50 dark:bg-blue-900/30 rounded-full">{current.category}</span>
+                <h2 
+                  className="font-black text-center break-words leading-tight text-slate-900 dark:text-slate-200"
+                  style={{ fontSize: fontSize }}
+                >
+                  {current.question}
+                </h2>
+                <div className="mt-10 flex flex-col items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-widest font-bold text-slate-300 dark:text-slate-600">Tap to flip • Swipe to navigate</span>
+                </div>
+              </div>
+              {/* Back */}
+              <div className="absolute inset-0 bg-white dark:bg-slate-900 rounded-[32px] border-2 border-blue-500 flex flex-col items-center justify-center p-6 [transform:rotateY(180deg)] [backface-visibility:hidden] shadow-xl overflow-hidden">
+                <div className="absolute top-4 right-4 z-20">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); speak(current.answer); }}
+                    className="p-2.5 bg-blue-50 dark:bg-blue-900/30 rounded-full text-blue-600 dark:text-blue-400 hover:scale-110 transition active:scale-95 border border-blue-100 dark:border-blue-800/50"
+                    title="Pronounce"
+                  >
+                    <Volume2 size={20} />
+                  </button>
+                </div>
+                
+                <div className="w-full h-full flex flex-col items-center justify-center p-4">
+                  <h2 
+                    className="font-bengali text-blue-600 dark:text-blue-500 mb-8 text-center leading-relaxed"
+                    style={{ fontSize: fontSize + 4 }}
+                  >
+                    {current.answer}
+                  </h2>
+                        
+                  <div className="grid grid-cols-2 gap-3 w-full max-w-[320px] mb-2">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); searchGoogle(current.question + ' explain in Bangla'); }}
+                      className="flex items-center justify-center gap-2 px-3 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-2xl text-[10px] font-bold hover:bg-blue-500 hover:text-white transition active:scale-95 shadow-sm text-slate-600 dark:text-slate-300"
+                    >
+                      <Search size={14} /> Google
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); searchChatGPT(current.question + ' explain in Bangla'); }}
+                      className="flex items-center justify-center gap-2 px-3 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-2xl text-[10px] font-bold hover:bg-slate-900 hover:text-white transition active:scale-95 shadow-sm text-slate-600 dark:text-slate-300"
+                    >
+                      <MessageSquare size={14} /> ChatGPT
+                    </button>
+                  </div>
 
-            <div className="flex flex-col gap-2 w-full max-w-[320px]">
-              <button 
-                onClick={(e) => { e.stopPropagation(); toggleStarred(current.question); }}
-                className={cn(
-                  "w-full px-4 py-3 rounded-2xl text-xs font-bold transition flex items-center justify-center gap-1 active:scale-95 shadow-lg",
-                  isStarred ? "bg-orange-500 text-white shadow-orange-500/20" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-orange-500 hover:text-white"
-                )}
-              >
-                <Star size={14} fill={isStarred ? "currentColor" : "none"} /> {isStarred ? 'Starred for Review' : 'Star for Review'}
-              </button>
-              <button 
-                onClick={(e) => { 
-                  e.stopPropagation(); 
-                  onToggleStatus(current.question, 'mastered');
-                }}
-                className={cn(
-                  "w-full px-4 py-4 rounded-2xl text-sm font-black transition flex items-center justify-center gap-2 active:scale-95 shadow-lg",
-                  status === 'mastered' ? "bg-emerald-500 text-white shadow-emerald-500/20" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-emerald-500 hover:text-white"
-                )}
-              >
-                <Check size={20} className={status === 'mastered' ? "stroke-[4px]" : "stroke-[2px]"} /> {status === 'mastered' ? 'Mastered!' : 'Mastered'}
-              </button>
-              <button 
-                onClick={(e) => { e.stopPropagation(); handleNext(); }}
-                className="w-full px-4 py-3 bg-blue-600 text-white rounded-2xl font-bold text-xs shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition active:scale-95"
-              >
-                Next Card
-              </button>
-            </div>
+                  <div className="flex flex-col gap-2 w-full max-w-[320px]">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); toggleStarred(current.question); }}
+                      className={cn(
+                        "w-full px-4 py-3 rounded-2xl text-xs font-bold transition flex items-center justify-center gap-1 active:scale-95 shadow-lg",
+                        isStarred ? "bg-orange-500 text-white shadow-orange-500/20" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-orange-500 hover:text-white"
+                      )}
+                    >
+                      <Star size={14} fill={isStarred ? "currentColor" : "none"} /> {isStarred ? 'Starred for Review' : 'Star for Review'}
+                    </button>
+                    <button 
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onToggleStatus(current.question, 'mastered');
+                      }}
+                      className={cn(
+                        "w-full px-4 py-4 rounded-2xl text-sm font-black transition flex items-center justify-center gap-2 active:scale-95 shadow-lg",
+                        status === 'mastered' ? "bg-emerald-500 text-white shadow-emerald-500/20" : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-emerald-500 hover:text-white"
+                      )}
+                    >
+                      <Check size={20} className={status === 'mastered' ? "stroke-[4px]" : "stroke-[2px]"} /> {status === 'mastered' ? 'Mastered!' : 'Mastered'}
+                    </button>
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); handleNext(); }}
+                      className="w-full px-4 py-3 bg-blue-600 text-white rounded-2xl font-bold text-xs shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition active:scale-95"
+                    >
+                      Next Card
+                    </button>
+                  </div>
 
-            <button 
-              onClick={(e) => { e.stopPropagation(); handleNext(); }}
-              className="mt-6 p-2 text-xs font-bold text-slate-400 hover:text-blue-500 transition active:scale-95"
-            >
-              Skip Card
-            </button>
-          </div>
-        </div>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleNext(); }}
+                    className="mt-6 p-2 text-xs font-bold text-slate-400 hover:text-blue-500 transition active:scale-95"
+                  >
+                    Skip Card
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        </AnimatePresence>
       </div>
-    </div>
 
       <div className="hidden sm:flex justify-between items-center px-4 pt-4">
         <button 
