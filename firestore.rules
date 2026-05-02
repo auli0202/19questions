@@ -1,0 +1,65 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validation Blueprints ---
+    function isValidUserProgress(data) {
+      return data.keys().hasAll(['starred', 'progress', 'srs', 'dailyLog', 'recent', 'updatedAt'])
+        && data.keys().size() == 6
+        && data.starred is map
+        && data.progress is map
+        && data.srs is map
+        && data.dailyLog is map
+        && data.recent is list
+        && data.recent.size() <= 100
+        && data.updatedAt is string;
+    }
+
+    // --- Collection: Users ---
+    match /users/{userId} {
+      // 3. Path Variable Hardening
+      allow get: if isOwner(userId) && isValidId(userId);
+      
+      // 2. Validation Blueprint (Anti-Update-Gap)
+      allow create: if isOwner(userId) 
+        && isValidId(userId)
+        && isValidUserProgress(incoming());
+
+      // 4. Tiered Identity & Action-Based Update
+      allow update: if isOwner(userId)
+        && isValidId(userId)
+        && isValidUserProgress(incoming())
+        && (
+          // Action: Full State Sync
+          incoming().diff(existing()).affectedKeys().hasOnly(['starred', 'progress', 'srs', 'dailyLog', 'recent', 'updatedAt'])
+        );
+
+      allow delete: if false; // Users cannot delete their data through the client for now
+    }
+  }
+}

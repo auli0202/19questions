@@ -1,0 +1,41 @@
+{
+  "entities": {
+    "UserProgress": {
+      "title": "User Progress",
+      "description": "User's progress across words, including stars, status, and SRS data",
+      "type": "object",
+      "properties": {
+        "starred": {
+          "type": "object",
+          "description": "Map of word IDs (questions) to boolean"
+        },
+        "progress": {
+          "type": "object",
+          "description": "Map of word IDs to WordStatus (new, mastered, review)"
+        },
+        "srs": {
+          "type": "object",
+          "description": "Map of word IDs to SRS data objects (interval, ease, next)"
+        },
+        "dailyLog": {
+          "type": "object",
+          "description": "Map of date strings to array of word IDs"
+        },
+        "recent": {
+          "type": "array",
+          "description": "Array of recently viewed word IDs"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last sync timestamp"
+        }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProgress",
+      "description": "Information about a user's language learning progress"
+    }
+  }
+}
