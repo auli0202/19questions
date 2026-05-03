@@ -8,6 +8,12 @@ export interface Word {
   importance: number;
   proverbEn: string;
   proverbBn: string;
+  phraseEn: string;
+  phrasePos: string;
+  phraseMeaningEn: string;
+  phraseMeaningBn: string;
+  phraseExEn: string;
+  phraseExBn: string;
 }
 
 export type WordStatus = 'new' | 'mastered' | 'review';

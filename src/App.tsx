@@ -16,6 +16,8 @@ import {
   Moon, 
   ChevronRight, 
   ChevronLeft,
+  ChevronUp,
+  ChevronDown,
   RotateCcw,
   RotateCw,
   Plus,
@@ -24,6 +26,7 @@ import {
   CheckCircle2,
   MessageSquare,
   BookOpen,
+  ArrowLeft,
   ArrowRight,
   Trash2,
   Trophy,
@@ -257,6 +260,22 @@ function DashboardView({
                 </div>
               </div>
               <ArrowRight size={16} className="text-slate-300 group-hover:text-orange-500 transition-all" />
+            </button>
+
+            <button 
+              onClick={() => setView('phrases')}
+              className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-all border border-transparent hover:border-indigo-100 group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl flex items-center justify-center text-indigo-600">
+                  <TrendingUp size={20} />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-none">Phrases</p>
+                  <p className="text-[10px] text-slate-500 mt-1">Natives' Idioms</p>
+                </div>
+              </div>
+              <ArrowRight size={16} className="text-slate-300 group-hover:text-indigo-500 transition-all" />
             </button>
           </div>
         </div>
@@ -533,6 +552,315 @@ function QuizView({ vocab, triggerHapticFeedback }: { vocab: Word[]; triggerHapt
   );
 }
 
+function PhrasesView({ 
+  vocab, 
+  phraseIdx, 
+  setPhraseIdx, 
+  speak, 
+  starred, 
+  toggleStarred, 
+  triggerHapticFeedback, 
+  autoRead,
+  searchChatGPT
+}: { 
+  vocab: Word[];
+  phraseIdx: number;
+  setPhraseIdx: (v: any) => void;
+  speak: (t: string, c?: boolean) => void;
+  starred: Record<string, boolean>;
+  toggleStarred: (id: string) => void;
+  triggerHapticFeedback: (t?: any) => void;
+  autoRead: boolean;
+  searchChatGPT: (q: string) => void;
+}) {
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [showExampleMobile, setShowExampleMobile] = useState(false);
+  
+  const phrasePool = useMemo(() => {
+    const base = vocab.filter(v => v.phraseEn && v.phraseMeaningEn);
+    if (showSavedOnly) {
+      return base.filter(v => starred[v.question]);
+    }
+    return base;
+  }, [vocab, showSavedOnly, starred]);
+  
+  useEffect(() => {
+    if (phrasePool.length > 0 && phraseIdx >= phrasePool.length) {
+      setPhraseIdx(0);
+    }
+  }, [phrasePool, phraseIdx, setPhraseIdx]);
+
+  const current = phrasePool[phraseIdx];
+
+  const lastSpokenRef = useRef<number>(-1);
+  useEffect(() => {
+    let t1: any;
+    if (!autoRead) {
+      lastSpokenRef.current = -1;
+      return;
+    }
+    
+    if (current && lastSpokenRef.current !== phraseIdx) {
+      lastSpokenRef.current = phraseIdx;
+      window.speechSynthesis.cancel();
+      
+      t1 = setTimeout(() => {
+        speak(current.phraseEn, true);
+      }, 400);
+    }
+
+    return () => {
+      clearTimeout(t1);
+      window.speechSynthesis.cancel();
+    };
+  }, [phraseIdx, autoRead, speak, current]);
+
+  if (phrasePool.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-20 opacity-50 space-y-4">
+      <TrendingUp size={48} className="text-slate-300" />
+      <p className="text-sm font-bold">No phrases found in the current library.</p>
+    </div>
+  );
+
+  const progressPct = ((phraseIdx + 1) / phrasePool.length) * 100;
+
+  const next = useCallback(() => setPhraseIdx((prev: number) => (prev + 1) % phrasePool.length), [phrasePool.length, setPhraseIdx]);
+  const prev = useCallback(() => setPhraseIdx((prev: number) => (prev - 1 + phrasePool.length) % phrasePool.length), [phrasePool.length, setPhraseIdx]);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'ArrowRight') next();
+      if (e.key === 'ArrowLeft') prev();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [next, prev]);
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-8 py-6 px-4 md:py-10">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-indigo-600 mb-1">
+            <div className="p-1.5 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg">
+              <TrendingUp size={16} />
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Idiom Master</span>
+          </div>
+          <h1 className="text-3xl font-black text-slate-900 dark:text-white leading-none">Phrases & Idioms</h1>
+          <p className="text-slate-500 dark:text-slate-400 font-medium pt-1">Learn to speak like a native.</p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
+           <button 
+             onClick={() => {
+               triggerHapticFeedback('light');
+               setShowSavedOnly(!showSavedOnly);
+               setPhraseIdx(0);
+             }}
+             className={cn(
+               "h-10 px-4 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all",
+               showSavedOnly 
+                 ? "bg-yellow-500 text-white shadow-lg shadow-yellow-500/20" 
+                 : "bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-indigo-500"
+             )}
+           >
+             <Star size={14} fill={showSavedOnly ? "white" : "none"} />
+             <span>{showSavedOnly ? "Saved Only" : "All Items"}</span>
+           </button>
+
+           <div className="w-px h-8 bg-slate-100 dark:bg-slate-800" />
+
+           <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Progress</p>
+                 <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{phraseIdx + 1}/{phrasePool.length}</p>
+              </div>
+              <div className="w-10 h-10 relative flex items-center justify-center">
+                 <svg className="w-full h-full -rotate-90">
+                   <circle cx="20" cy="20" r="16" fill="none" stroke="currentColor" strokeWidth="3" className="text-slate-100 dark:text-slate-800" />
+                   <circle 
+                     cx="20" cy="20" r="16" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray="100.53"
+                     style={{ strokeDashoffset: 100.53 - (100.53 * progressPct) / 100 }}
+                     className="text-indigo-500 transition-all duration-500"
+                   />
+                 </svg>
+                 <span className="absolute text-[8px] font-black">{Math.round(progressPct)}%</span>
+              </div>
+           </div>
+        </div>
+      </div>
+
+      <div className="relative group">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={phraseIdx}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.7}
+            onDragEnd={(_, info) => {
+              if (info.offset.x < -100) { triggerHapticFeedback('light'); next(); }
+              else if (info.offset.x > 100) { triggerHapticFeedback('light'); prev(); }
+            }}
+            className="relative bg-white dark:bg-slate-900 rounded-[32px] border-2 border-slate-100 dark:border-slate-800 shadow-2xl shadow-indigo-500/5 overflow-hidden cursor-auto touch-none flex flex-col md:flex-row md:min-h-[440px] select-text"
+          >
+              {/* Mobile Only Pronunciation Button */}
+              <button 
+                onClick={(e) => { e.stopPropagation(); speak(current.phraseEn); }}
+                className="md:hidden absolute top-6 right-6 z-30 w-10 h-10 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-sm active:scale-95 transition-all"
+                title="Pronounce"
+              >
+                <Volume2 size={18} />
+              </button>
+
+              {/* Left Side: Primary Focus */}
+              <div className="flex-1 p-8 md:p-12 flex flex-col items-center justify-center text-center space-y-6 md:border-r border-slate-50 dark:border-slate-800 pointer-events-auto">
+                <div className="space-y-4 w-full">
+                  <div className="flex items-center justify-center gap-2 select-none">
+                    <span className="px-3 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 text-[9px] font-black uppercase tracking-widest rounded-full border border-indigo-100 dark:border-indigo-800/50">
+                      {current.phrasePos || 'Expression'}
+                    </span>
+                  </div>
+                  
+                  <h2 className="text-2xl md:text-4xl font-black text-slate-900 dark:text-white leading-tight tracking-tight selection:bg-indigo-100 dark:selection:bg-indigo-500/30">
+                    {current.phraseEn}
+                  </h2>
+
+                  <div className="pt-2 select-none hidden md:block">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); speak(current.phraseEn); }}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-xs shadow-lg shadow-indigo-600/20 hover:scale-105 transition-all active:scale-95"
+                    >
+                      <Volume2 size={16} /> Pronounce
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Side: Detailed Info */}
+              <div className="flex-1 bg-slate-50/50 dark:bg-slate-800/30 p-8 md:p-12 flex flex-col justify-center space-y-6 md:space-y-8 pointer-events-auto">
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 select-none">English Meaning</p>
+                    <p className="text-base md:text-lg font-bold text-slate-700 dark:text-slate-300 leading-snug selection:bg-indigo-100">
+                      {current.phraseMeaningEn || "No definition available."}
+                    </p>
+                  </div>
+
+                  <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-indigo-500 select-none">Bengali Meaning</p>
+                    <p className="font-bengali text-2xl md:text-3xl font-black text-indigo-600 dark:text-indigo-400 leading-tight selection:bg-indigo-100">
+                      {current.phraseMeaningBn || "অর্থ পাওয়া যায়নি"}
+                    </p>
+                  </div>
+
+                  {(current.phraseExEn || current.phraseExBn) && (
+                    <div className="space-y-3">
+                      <button 
+                        onClick={() => setShowExampleMobile(!showExampleMobile)}
+                        className="md:hidden w-full p-4 bg-white dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center justify-center gap-2 active:bg-slate-50 transition-colors"
+                      >
+                        {showExampleMobile ? (
+                          <>Hide Example <ChevronUp size={14} /></>
+                        ) : (
+                          <>Show Example <ChevronDown size={14} /></>
+                        )}
+                      </button>
+
+                      <AnimatePresence>
+                        {(showExampleMobile || window.innerWidth >= 768) && (
+                          <motion.div 
+                            initial={window.innerWidth < 768 ? { height: 0, opacity: 0 } : false}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden md:!h-auto md:!opacity-100"
+                          >
+                            <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 mt-4 md:mt-0">
+                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 select-none">Example Sentence</p>
+                              <div className="space-y-2">
+                                {current.phraseExEn && (
+                                  <p className="text-sm md:text-base font-medium text-slate-700 dark:text-slate-300 italic leading-relaxed selection:bg-indigo-100">
+                                    "{current.phraseExEn}"
+                                  </p>
+                                )}
+                                {current.phraseExBn && (
+                                  <p className="font-bengali text-base md:text-lg font-medium text-slate-600 dark:text-slate-400 leading-relaxed border-t border-slate-50 dark:border-slate-800 pt-2 selection:bg-indigo-100">
+                                    {current.phraseExBn}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-2 flex items-center gap-3 select-none">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleStarred(current.question);
+                    }}
+                    className={cn(
+                      "flex-1 h-12 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                      starred[current.question] 
+                        ? "bg-yellow-500 text-white shadow-lg shadow-yellow-500/30" 
+                        : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:border-yellow-500 hover:text-yellow-600"
+                    )}
+                  >
+                    <Star size={16} fill={starred[current.question] ? "white" : "none"} />
+                    {starred[current.question] ? 'Saved' : 'Save'}
+                  </button>
+
+                  <button 
+                    onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(`"${current.phraseEn}" meaning en & bn with examples`)}`, '_blank')}
+                    className="w-12 h-12 flex items-center justify-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-slate-400 hover:text-blue-500 transition-all shadow-sm"
+                    title="Search on Google"
+                  >
+                    <Search size={18} />
+                  </button>
+                  
+                  <button 
+                    onClick={() => searchChatGPT(`${current.phraseEn} (${current.phrasePos}) - show 3 simple usage examples in English with Bengali translations.`)}
+                    className="w-12 h-12 flex items-center justify-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-slate-400 hover:text-indigo-600 transition-all shadow-sm"
+                    title="Deep Dive with AI"
+                  >
+                    <Sparkles size={18} />
+                  </button>
+                </div>
+              </div>
+          </motion.div>
+        </AnimatePresence>
+
+        {/* Navigation Buttons (Desktop) */}
+        <div className="absolute top-1/2 -left-16 -translate-y-1/2 hidden lg:block">
+          <button onClick={prev} className="w-12 h-12 flex items-center justify-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full shadow-xl text-slate-400 hover:text-indigo-600 transition-all hover:scale-110 active:scale-90">
+            <ChevronLeft size={24} />
+          </button>
+        </div>
+        <div className="absolute top-1/2 -right-16 -translate-y-1/2 hidden lg:block">
+          <button onClick={next} className="w-12 h-12 flex items-center justify-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full shadow-xl text-slate-400 hover:text-indigo-600 transition-all hover:scale-110 active:scale-90">
+            <ChevronRight size={24} />
+          </button>
+        </div>
+      </div>
+
+      {/* Swipe Hint (Mobile) */}
+      <div className="md:hidden flex justify-center pb-4">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-300 dark:text-slate-600 flex items-center gap-2">
+          <ArrowLeft size={10} /> Swipe to Navigate <ArrowRight size={10} />
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function ProverbsView({ 
   vocab, 
   proverbIdx, 
@@ -695,29 +1023,29 @@ function ProverbsView({
                 prev();
               }
             }}
-            className="bg-white dark:bg-slate-900 rounded-[32px] border-2 border-slate-100 dark:border-slate-800 p-8 md:p-12 shadow-2xl shadow-blue-500/5 flex flex-col items-center text-center space-y-6 relative overflow-hidden cursor-grab active:cursor-grabbing touch-none"
+            className="bg-white dark:bg-slate-900 rounded-[32px] border-2 border-slate-100 dark:border-slate-800 p-8 md:p-12 shadow-2xl shadow-blue-500/5 flex flex-col items-center text-center space-y-6 relative overflow-hidden cursor-auto touch-none select-text"
           >
-              <div className="absolute top-0 right-0 p-8 opacity-5">
+              <div className="absolute top-0 right-0 p-8 opacity-5 select-none">
                 <Sparkles size={100} />
               </div>
               
               <div className="space-y-3 relative z-10 w-full">
-                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-blue-500 mb-1">Original</p>
-                <h2 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white leading-snug">
+                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-blue-500 mb-1 select-none">Original</p>
+                <h2 className="text-xl md:text-2xl font-black text-slate-900 dark:text-white leading-snug selection:bg-blue-100">
                   "{current.proverbEn}"
                 </h2>
               </div>
 
-              <div className="w-10 h-0.5 bg-slate-100 dark:bg-slate-800 rounded-full" />
+              <div className="w-10 h-0.5 bg-slate-100 dark:bg-slate-800 rounded-full select-none" />
 
               <div className="space-y-3 relative z-10 w-full">
-                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-1">Bengali Equivalent</p>
-                <p className="font-bengali text-xl md:text-2xl font-bold text-blue-600 dark:text-blue-400">
+                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-slate-400 mb-1 select-none">Bengali Equivalent</p>
+                <p className="font-bengali text-xl md:text-2xl font-bold text-blue-600 dark:text-blue-400 selection:bg-blue-100">
                   {current.proverbBn}
                 </p>
               </div>
 
-              <div className="pt-4 flex items-center justify-center gap-2">
+              <div className="pt-4 flex items-center justify-center gap-2 select-none">
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
@@ -936,7 +1264,7 @@ export default function App() {
   // --- Core State ---
   const [vocab, setVocab] = useState<Word[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'dash' | 'browse' | 'flash' | 'quiz' | 'saved' | 'proverbs'>('browse');
+  const [view, setView] = useState<'dash' | 'browse' | 'flash' | 'quiz' | 'saved' | 'proverbs' | 'phrases'>('browse');
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('theme');
@@ -959,6 +1287,7 @@ export default function App() {
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const [isNavVisible, setIsNavVisible] = useState(true);
   const [proverbIdx, setProverbIdx] = useState(() => Number(localStorage.getItem('hscProverbIdx') || '0'));
+  const [phraseIdx, setPhraseIdx] = useState(() => Number(localStorage.getItem('hscPhraseIdx') || '0'));
 
   // --- Persistence ---
   const [progress, setProgress] = useState<ProgressData>(() => JSON.parse(localStorage.getItem('hscProgress') || '{}'));
@@ -1072,18 +1401,23 @@ export default function App() {
         const parsed = Papa.parse(csvText, { header: false }).data as string[][];
         
         // Remove header row and map to Word objects
-        const words: Word[] = parsed.slice(1).filter(row => (row[1] && row[2]) || (row[6] && row[7])).map(row => {
-          const isProverb = !(row[1] && row[2]) && (row[6] && row[7]);
+        const words: Word[] = parsed.slice(1).filter(row => (row[1] && row[2]) || (row[6] && row[7]) || (row[8] && row[9])).map(row => {
           return {
             sn: row[0],
-            question: (row[1] || row[6] || `PV-${row[0]}`).trim(), 
-            answer: (row[2] || row[7] || '').trim(),
+            question: (row[1] || row[6] || row[8] || `ITEM-${row[0]}`).trim(), 
+            answer: (row[2] || row[7] || row[9] || '').trim(),
             mainCategory: row[3] || 'General',
             subCategory: row[4] || 'General',
             category: row[3] || 'General', 
             importance: parseInt(row[5]) || 0,
             proverbEn: row[6] || '',
-            proverbBn: row[7] || ''
+            proverbBn: row[7] || '',
+            phraseEn: row[8] || '',
+            phrasePos: row[9] || '',
+            phraseMeaningEn: row[10] || '',
+            phraseMeaningBn: row[11] || '',
+            phraseExEn: row[12] || '',
+            phraseExBn: row[13] || ''
           };
         });
         
@@ -1127,6 +1461,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('hscProverbIdx', proverbIdx.toString());
   }, [proverbIdx]);
+
+  useEffect(() => {
+    localStorage.setItem('hscPhraseIdx', phraseIdx.toString());
+  }, [phraseIdx]);
 
   // --- Helper Functions ---
   const toggleStarred = (id: string) => {
@@ -1324,14 +1662,15 @@ export default function App() {
                <span className="font-black text-xl md:text-2xl tracking-tighter text-slate-900 dark:text-white">19questions</span>
             </button>
             
-            <nav className="hidden md:flex items-center gap-1">
-              <HeaderNavItem id="dash" icon={<LayoutDashboard size={16} />} label="Dash" currentView={view} setView={setView} />
-              <HeaderNavItem id="browse" icon={<LibraryIcon size={16} />} label="Library" currentView={view} setView={setView} />
-              <HeaderNavItem id="flash" icon={<Library size={16} />} label="Flashcards" currentView={view} setView={setView} />
-              <HeaderNavItem id="proverbs" icon={<Sparkles size={16} />} label="Proverbs" currentView={view} setView={setView} />
-              <HeaderNavItem id="quiz" icon={<Zap size={16} />} label="Quiz" currentView={view} setView={setView} />
-              <HeaderNavItem id="saved" icon={<Star size={16} />} label="Review" currentView={view} setView={setView} />
-            </nav>
+              <nav className="hidden md:flex items-center gap-1">
+                <HeaderNavItem id="dash" icon={<LayoutDashboard size={16} />} label="Dash" currentView={view} setView={setView} />
+                <HeaderNavItem id="browse" icon={<LibraryIcon size={16} />} label="Library" currentView={view} setView={setView} />
+                <HeaderNavItem id="flash" icon={<Library size={16} />} label="Flashcards" currentView={view} setView={setView} />
+                <HeaderNavItem id="proverbs" icon={<Sparkles size={16} />} label="Proverbs" currentView={view} setView={setView} />
+                <HeaderNavItem id="phrases" icon={<TrendingUp size={16} />} label="Phrases" currentView={view} setView={setView} />
+                <HeaderNavItem id="quiz" icon={<Zap size={16} />} label="Quiz" currentView={view} setView={setView} />
+                <HeaderNavItem id="saved" icon={<Star size={16} />} label="Review" currentView={view} setView={setView} />
+              </nav>
 
             <div className="flex items-center gap-1 md:gap-3">
               {/* Mobile Search Expandable */}
@@ -1475,6 +1814,7 @@ export default function App() {
                 <NavItem id="browse" icon={<LibraryIcon size={20} />} label="Browse Library" currentView={view} setView={setView} setIsMobileMenuOpen={setIsMobileMenuOpen} />
                 <NavItem id="flash" icon={<Library size={20} />} label="Flashcards" currentView={view} setView={setView} setIsMobileMenuOpen={setIsMobileMenuOpen} />
                 <NavItem id="proverbs" icon={<Sparkles size={20} />} label="Proverbs" currentView={view} setView={setView} setIsMobileMenuOpen={setIsMobileMenuOpen} />
+                <NavItem id="phrases" icon={<TrendingUp size={20} />} label="Phrases & Idioms" currentView={view} setView={setView} setIsMobileMenuOpen={setIsMobileMenuOpen} />
                 <NavItem id="quiz" icon={<Zap size={20} />} label="Quiz Mode" currentView={view} setView={setView} setIsMobileMenuOpen={setIsMobileMenuOpen} />
                 <NavItem id="saved" icon={<Star size={20} />} label="Review Questions" currentView={view} setView={setView} setIsMobileMenuOpen={setIsMobileMenuOpen} />
                 <div className="pt-4 mt-2 border-t border-slate-100 dark:border-slate-800">
@@ -1879,6 +2219,19 @@ export default function App() {
             </div>
           )}
           {view === 'quiz' && <QuizView vocab={vocab} triggerHapticFeedback={triggerHapticFeedback} />}
+          {view === 'phrases' && (
+            <PhrasesView 
+              vocab={vocab} 
+              phraseIdx={phraseIdx} 
+              setPhraseIdx={setPhraseIdx} 
+              speak={speak} 
+              starred={starred} 
+              toggleStarred={toggleStarred} 
+              triggerHapticFeedback={triggerHapticFeedback}
+              autoRead={autoRead}
+              searchChatGPT={searchChatGPT}
+            />
+          )}
           {view === 'proverbs' && (
             <ProverbsView 
               vocab={vocab}
@@ -1953,12 +2306,13 @@ export default function App() {
       {/* --- Footer / Navigation (Mobile) --- */}
       {isNavVisible && (
         <footer className="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 p-1 flex justify-around z-40 pb-safe shadow-lg overflow-x-auto whitespace-nowrap scrollbar-hide">
-          <MobileNavItem id="dash" icon={<LayoutDashboard size={16} />} view={view} setView={setView} />
-          <MobileNavItem id="browse" icon={<Search size={16} />} view={view} setView={setView} />
-          <MobileNavItem id="flash" icon={<Library size={16} />} view={view} setView={setView} />
-          <MobileNavItem id="quiz" icon={<Zap size={16} />} view={view} setView={setView} />
-          <MobileNavItem id="saved" icon={<Star size={16} />} view={view} setView={setView} label="Review" />
-          <MobileNavItem id="profile" icon={<User size={16} />} view={view} setView={setView} label="Profile" />
+          <MobileNavItem id="dash" icon={<LayoutDashboard size={20} />} view={view} setView={setView} label="Dash" />
+          <MobileNavItem id="browse" icon={<LibraryIcon size={20} />} view={view} setView={setView} label="Library" />
+          <MobileNavItem id="flash" icon={<Library size={20} />} view={view} setView={setView} label="Flash" />
+          <MobileNavItem id="proverbs" icon={<Sparkles size={20} />} view={view} setView={setView} label="Wisdom" />
+          <MobileNavItem id="phrases" icon={<TrendingUp size={20} />} view={view} setView={setView} label="Phrases" />
+          <MobileNavItem id="quiz" icon={<Zap size={20} />} view={view} setView={setView} label="Quiz" />
+          <MobileNavItem id="saved" icon={<Star size={20} />} view={view} setView={setView} label="Review" />
         </footer>
       )}
 
