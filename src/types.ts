@@ -14,6 +14,12 @@ export interface Word {
   phraseMeaningBn: string;
   phraseExEn: string;
   phraseExBn: string;
+  verbEn: string;
+  verbPron: string;
+  verbMeaningBn: string;
+  verbForms: string;
+  verbExEn: string;
+  verbExBn: string;
 }
 
 export type WordStatus = 'new' | 'mastered' | 'review';

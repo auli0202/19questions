@@ -36,13 +36,33 @@ import {
   Flame,
   LogOut,
   Shield,
-  Sparkles
+  Sparkles,
+  LayoutGrid
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Word, WordStatus, ProgressData, DailyLog, SRSData } from './types.ts';
 import { useAuth, db, handleFirestoreError, OperationType } from './lib/firebase';
-import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  rectSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 /** Utility for Tailwind class merging */
 function cn(...inputs: ClassValue[]) {
@@ -118,7 +138,9 @@ function DashboardView({
   recentQuestions, 
   setView, 
   setSearchQuery,
-  mainCategories
+  mainCategories,
+  setBrowseLevel,
+  setSelectedMainCategory
 }: { 
   vocab: Word[]; 
   progress: ProgressData; 
@@ -127,6 +149,8 @@ function DashboardView({
   setView: (v: any) => void;
   setSearchQuery: (s: string) => void;
   mainCategories: string[];
+  setBrowseLevel: (l: any) => void;
+  setSelectedMainCategory: (c: string) => void;
 }) {
   const [expandedMainCategory, setExpandedMainCategory] = useState<string | null>(null);
 
@@ -141,8 +165,8 @@ function DashboardView({
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening';
 
-  const recentWords = recentQuestions
-    .map(q => vocab.find(v => v.question === q))
+  const recentWords = (recentQuestions || [])
+    .map(q => vocab?.find(v => v.question === q))
     .filter((v): v is Word => !!v);
 
   const subCategoriesForMain = useMemo(() => {
@@ -277,6 +301,42 @@ function DashboardView({
               </div>
               <ArrowRight size={16} className="text-slate-300 group-hover:text-indigo-500 transition-all" />
             </button>
+
+            <button 
+              onClick={() => setView('verbs')}
+              className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-all border border-transparent hover:border-emerald-100 group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-100 dark:bg-emerald-900/30 rounded-xl flex items-center justify-center text-emerald-600">
+                  <RotateCw size={20} />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-none">Verbs</p>
+                  <p className="text-[10px] text-slate-500 mt-1">Action Conjugations</p>
+                </div>
+              </div>
+              <ArrowRight size={16} className="text-slate-300 group-hover:text-emerald-500 transition-all" />
+            </button>
+
+            <button 
+              onClick={() => {
+                setView('browse');
+                setSelectedMainCategory('');
+                setBrowseLevel('sub');
+              }}
+              className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-all border border-transparent hover:border-purple-100 group"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-purple-100 dark:bg-purple-900/30 rounded-xl flex items-center justify-center text-purple-600">
+                  <LayoutGrid size={20} />
+                </div>
+                <div className="text-left">
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-none">Sub-Categories</p>
+                  <p className="text-[10px] text-slate-500 mt-1">Arrange by topic</p>
+                </div>
+              </div>
+              <ArrowRight size={16} className="text-slate-300 group-hover:text-purple-500 transition-all" />
+            </button>
           </div>
         </div>
       </div>
@@ -317,15 +377,26 @@ function DashboardView({
                     >
                       <div className="flex justify-between items-end">
                         <div className="flex flex-col">
-                          <span className="text-sm font-bold text-slate-800 dark:text-slate-300 group-hover:text-blue-500 transition-colors uppercase tracking-tight">{cat}</span>
+                          <span className={cn(
+                             "text-sm font-bold transition-colors uppercase tracking-tight",
+                             pct === 100 ? "text-emerald-600 dark:text-emerald-400" : "text-slate-800 dark:text-slate-300 group-hover:text-blue-500"
+                          )}>
+                            {cat}
+                          </span>
                           <span className="text-[10px] text-slate-400 font-medium">{masteredInCat} of {catWords.length} mastered</span>
                         </div>
-                        <span className="text-xs font-black text-blue-500">{pct}%</span>
+                        <span className={cn(
+                          "text-xs font-black",
+                          pct === 100 ? "text-emerald-500" : "text-blue-500"
+                        )}>{pct}%</span>
                       </div>
                       <div className="h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                         <div 
                           style={{ width: `${pct}%` }}
-                          className="h-full bg-blue-500 rounded-full group-hover:bg-blue-600 transition-colors"
+                          className={cn(
+                            "h-full transition-colors rounded-full",
+                            pct === 100 ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]" : "bg-blue-500 group-hover:bg-blue-600"
+                          )}
                         />
                       </div>
                     </div>
@@ -348,13 +419,22 @@ function DashboardView({
                         className="space-y-2"
                       >
                         <div className="flex justify-between items-end">
-                          <span className="text-xs font-bold text-slate-600 dark:text-slate-400">{sub}</span>
-                          <span className="text-[10px] font-black text-slate-400">{pct}%</span>
+                          <span className={cn(
+                            "text-xs font-bold transition-colors",
+                            pct === 100 ? "text-emerald-500" : "text-slate-600 dark:text-slate-400"
+                          )}>{sub}</span>
+                          <span className={cn(
+                            "text-[10px] font-black",
+                            pct === 100 ? "text-emerald-500" : "text-slate-400"
+                          )}>{pct}%</span>
                         </div>
                         <div className="h-1.5 bg-slate-50 dark:bg-slate-800/30 rounded-full overflow-hidden">
                           <div 
                             style={{ width: `${pct}%` }}
-                            className="h-full bg-blue-400 rounded-full shadow-[0_0_8px_rgba(59,130,246,0.1)]"
+                            className={cn(
+                               "h-full transition-all rounded-full",
+                               pct === 100 ? "bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.2)]" : "bg-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.1)]"
+                            )}
                           />
                         </div>
                       </div>
@@ -1134,6 +1214,328 @@ function ProverbsView({
   );
 }
 
+function VerbsView({ 
+  vocab, 
+  verbIdx, 
+  setVerbIdx, 
+  speak, 
+  starred, 
+  toggleStarred, 
+  triggerHapticFeedback, 
+  autoRead,
+  searchChatGPT
+}: { 
+  vocab: Word[];
+  verbIdx: number;
+  setVerbIdx: (v: any) => void;
+  speak: (t: string, c?: boolean) => void;
+  starred: Record<string, boolean>;
+  toggleStarred: (id: string) => void;
+  triggerHapticFeedback: (t?: any) => void;
+  autoRead: boolean;
+  searchChatGPT: (q: string) => void;
+}) {
+  const [showSavedOnly, setShowSavedOnly] = useState(false);
+  const [showExampleMobile, setShowExampleMobile] = useState(false);
+  
+  const verbPool = useMemo(() => {
+    const base = vocab.filter(v => v.verbEn && v.verbMeaningBn);
+    if (showSavedOnly) {
+      return base.filter(v => starred[v.question]);
+    }
+    return base;
+  }, [vocab, showSavedOnly, starred]);
+  
+  useEffect(() => {
+    if (verbPool.length > 0 && verbIdx >= verbPool.length) {
+      setVerbIdx(0);
+    }
+  }, [verbPool, verbIdx, setVerbIdx]);
+
+  const current = verbPool[verbIdx];
+
+  const lastSpokenRef = useRef<number>(-1);
+  useEffect(() => {
+    let t1: any;
+    if (!autoRead) {
+      lastSpokenRef.current = -1;
+      return;
+    }
+    
+    if (current && lastSpokenRef.current !== verbIdx) {
+      lastSpokenRef.current = verbIdx;
+      window.speechSynthesis.cancel();
+      
+      t1 = setTimeout(() => {
+        speak(current.verbEn, true);
+      }, 400);
+    }
+
+    return () => {
+      clearTimeout(t1);
+      window.speechSynthesis.cancel();
+    };
+  }, [verbIdx, autoRead, speak, current]);
+
+  if (verbPool.length === 0) return (
+    <div className="flex flex-col items-center justify-center py-20 opacity-50 space-y-4">
+      <RotateCw size={48} className="text-slate-300" />
+      <p className="text-sm font-bold">No verbs found in the current library.</p>
+    </div>
+  );
+
+  const progressPct = ((verbIdx + 1) / verbPool.length) * 100;
+
+  const next = useCallback(() => setVerbIdx((prev: number) => (prev + 1) % verbPool.length), [verbPool.length, setVerbIdx]);
+  const prev = useCallback(() => setVerbIdx((prev: number) => (prev - 1 + verbPool.length) % verbPool.length), [verbPool.length, setVerbIdx]);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (e.key === 'ArrowRight') next();
+      if (e.key === 'ArrowLeft') prev();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [next, prev]);
+
+  return (
+    <div className="max-w-4xl mx-auto space-y-8 py-6 px-4 md:py-10">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-emerald-600 mb-1">
+            <div className="p-1.5 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
+              <RotateCw size={16} />
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-[0.2em]">Action Words</span>
+          </div>
+          <h1 className="text-3xl font-black text-slate-900 dark:text-white leading-none">Verbs & Actions</h1>
+          <p className="text-slate-500 dark:text-slate-400 font-medium pt-1">Master conjugation and usage.</p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
+           <button 
+             onClick={() => {
+               triggerHapticFeedback('light');
+               setShowSavedOnly(!showSavedOnly);
+               setVerbIdx(0);
+             }}
+             className={cn(
+               "h-10 px-4 rounded-xl flex items-center gap-2 text-[10px] font-black uppercase tracking-widest transition-all",
+               showSavedOnly 
+                 ? "bg-yellow-500 text-white shadow-lg shadow-yellow-500/20" 
+                 : "bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-emerald-500"
+             )}
+           >
+             <Star size={14} fill={showSavedOnly ? "white" : "none"} />
+             <span>{showSavedOnly ? "Saved Only" : "All Verbs"}</span>
+           </button>
+
+           <div className="w-px h-8 bg-slate-100 dark:bg-slate-800" />
+
+           <div className="flex items-center gap-3">
+              <div className="text-right hidden sm:block">
+                 <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">Progress</p>
+                 <p className="text-sm font-bold text-slate-700 dark:text-slate-200">{verbIdx + 1}/{verbPool.length}</p>
+              </div>
+              <div className="w-10 h-10 relative flex items-center justify-center">
+                 <svg className="w-full h-full -rotate-90">
+                   <circle cx="20" cy="20" r="16" fill="none" stroke="currentColor" strokeWidth="3" className="text-slate-100 dark:text-slate-800" />
+                   <circle 
+                     cx="20" cy="20" r="16" fill="none" stroke="currentColor" strokeWidth="3" strokeDasharray="100.53"
+                     style={{ strokeDashoffset: 100.53 - (100.53 * progressPct) / 100 }}
+                     className="text-emerald-500 transition-all duration-500"
+                   />
+                 </svg>
+                 <span className="absolute text-[8px] font-black">{Math.round(progressPct)}%</span>
+              </div>
+           </div>
+        </div>
+      </div>
+
+      <div className="relative group">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={verbIdx}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+            drag="x"
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={1}
+            onDragEnd={(_, info) => {
+              if (info.offset.x < -100) { triggerHapticFeedback('light'); next(); }
+              else if (info.offset.x > 100) { triggerHapticFeedback('light'); prev(); }
+            }}
+            className="relative bg-white dark:bg-slate-900 rounded-[32px] border-2 border-slate-100 dark:border-slate-800 shadow-2xl shadow-emerald-500/5 overflow-hidden cursor-auto touch-none flex flex-col md:flex-row md:min-h-[440px] select-text"
+          >
+              <button 
+                onClick={(e) => { e.stopPropagation(); speak(current.verbEn); }}
+                className="md:hidden absolute top-6 right-6 z-30 w-10 h-10 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border border-slate-200 dark:border-slate-700 rounded-full flex items-center justify-center text-emerald-600 dark:text-emerald-400 shadow-sm active:scale-95 transition-all"
+                title="Pronounce"
+              >
+                <Volume2 size={18} />
+              </button>
+
+              <div className="flex-1 p-8 md:p-12 flex flex-col items-center justify-center text-center space-y-6 md:border-r border-slate-50 dark:border-slate-800 pointer-events-auto">
+                <div className="space-y-4 w-full">
+                  <div className="flex items-center justify-center gap-2 select-none">
+                    <span className="px-3 py-1 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 text-[9px] font-black uppercase tracking-widest rounded-full border border-emerald-100 dark:border-emerald-800/50">
+                      {current.verbPron || 'Verb'}
+                    </span>
+                  </div>
+                  
+                  <h2 className="text-3xl md:text-5xl font-black text-slate-900 dark:text-white leading-tight tracking-tight selection:bg-emerald-100 dark:selection:bg-emerald-500/30">
+                    {current.verbEn}
+                  </h2>
+
+                  {current.verbForms && (
+                    <div className="mt-4 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-700">
+                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Verb Forms</p>
+                      <div className="flex items-center justify-center gap-2">
+                        <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400 italic font-mono">{current.verbForms}</p>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); speak(current.verbForms); }}
+                          className="p-1 text-slate-400 hover:text-emerald-500 transition-colors rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/30"
+                          title="Pronounce forms"
+                        >
+                          <Volume2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="pt-2 select-none hidden md:block">
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); speak(current.verbEn); }}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-xs shadow-lg shadow-emerald-600/20 hover:scale-105 transition-all active:scale-95"
+                    >
+                      <Volume2 size={16} /> Pronounce
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 bg-slate-50/50 dark:bg-slate-800/30 p-8 md:p-12 flex flex-col justify-center space-y-6 md:space-y-8 pointer-events-auto">
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 select-none">Bengali Meaning</p>
+                    <p className="font-bengali text-3xl md:text-4xl font-black text-slate-900 dark:text-white leading-tight selection:bg-emerald-100">
+                      {current.verbMeaningBn || "অর্থ পাওয়া যায়নি"}
+                    </p>
+                  </div>
+
+                  {(current.verbExEn || current.verbExBn) && (
+                    <div className="space-y-3">
+                      <button 
+                        onClick={() => setShowExampleMobile(!showExampleMobile)}
+                        className="md:hidden w-full p-4 bg-white dark:bg-slate-900 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center justify-center gap-2 active:bg-slate-50 transition-colors"
+                      >
+                        {showExampleMobile ? (
+                          <>Hide Example <ChevronUp size={14} /></>
+                        ) : (
+                          <>Show Example <ChevronDown size={14} /></>
+                        )}
+                      </button>
+
+                      <AnimatePresence>
+                        {(showExampleMobile || window.innerWidth >= 768) && (
+                          <motion.div 
+                            initial={window.innerWidth < 768 ? { height: 0, opacity: 0 } : false}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden md:!h-auto md:!opacity-100"
+                          >
+                            <div className="p-5 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 mt-4 md:mt-0">
+                              <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 select-none">Example Sentence</p>
+                              <div className="space-y-2">
+                                {current.verbExEn && (
+                                  <p className="text-lg md:text-xl font-medium text-slate-700 dark:text-slate-300 italic leading-relaxed selection:bg-emerald-100">
+                                    "{current.verbExEn}"
+                                  </p>
+                                )}
+                                {current.verbExBn && (
+                                  <p className="font-bengali text-xl md:text-2xl font-medium text-slate-600 dark:text-slate-400 leading-relaxed border-t border-slate-50 dark:border-slate-800 pt-2 selection:bg-emerald-100">
+                                    {current.verbExBn}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-2 flex items-center gap-3 select-none">
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleStarred(current.question);
+                    }}
+                    className={cn(
+                      "flex-1 h-12 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2",
+                      starred[current.question] 
+                        ? "bg-yellow-500 text-white shadow-lg shadow-yellow-500/30" 
+                        : "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 hover:border-yellow-500 hover:text-yellow-600"
+                    )}
+                  >
+                    <Star size={16} fill={starred[current.question] ? "white" : "none"} />
+                    {starred[current.question] ? 'Saved' : 'Save'}
+                  </button>
+
+                  <button 
+                    onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(`"${current.verbEn}" meaning en & bn with examples`)}`, '_blank')}
+                    className="w-12 h-12 flex items-center justify-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-slate-400 hover:text-emerald-500 transition-all shadow-sm"
+                    title="Search on Google"
+                  >
+                    <Search size={18} />
+                  </button>
+                  
+                  <button 
+                    onClick={() => searchChatGPT(`Verb: "${current.verbEn}" - explain meaning in Bengali, provide V1, V2, V3 forms, and 3 simple usage examples in English with Bengali translations.`)}
+                    className="w-12 h-12 flex items-center justify-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-slate-400 hover:text-indigo-600 transition-all shadow-sm"
+                    title="Deep Dive with AI"
+                  >
+                    <Sparkles size={18} />
+                  </button>
+                </div>
+              </div>
+          </motion.div>
+        </AnimatePresence>
+
+        <div className="absolute top-1/2 -left-16 -translate-y-1/2 hidden lg:block">
+          <button onClick={prev} className="w-12 h-12 flex items-center justify-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full shadow-xl text-slate-400 hover:text-emerald-600 transition-all hover:scale-110 active:scale-90">
+            <ChevronLeft size={24} />
+          </button>
+        </div>
+        <div className="absolute top-1/2 -right-16 -translate-y-1/2 hidden lg:block">
+          <button onClick={next} className="w-12 h-12 flex items-center justify-center bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-full shadow-xl text-slate-400 hover:text-emerald-600 transition-all hover:scale-110 active:scale-90">
+            <ChevronRight size={24} />
+          </button>
+        </div>
+      </div>
+
+      <div className="md:hidden flex justify-center pb-4">
+        <p className="text-[10px] font-black uppercase tracking-widest text-slate-300 dark:text-slate-600 flex items-center gap-2">
+          <ArrowLeft size={10} /> Swipe to Navigate <ArrowRight size={10} />
+        </p>
+      </div>
+
+      <div className="text-center">
+         <button 
+           onClick={() => setVerbIdx(Math.floor(Math.random() * verbPool.length))}
+           className="px-6 py-2 bg-emerald-100 dark:bg-slate-800 text-emerald-600 dark:text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-emerald-50 dark:hover:bg-emerald-900/20 hover:text-emerald-700 transition-all shadow-sm"
+         >
+           Random Verb
+         </button>
+      </div>
+    </div>
+  );
+}
+
 function HeaderNavItem({ 
   icon, 
   label, 
@@ -1264,7 +1666,7 @@ export default function App() {
   // --- Core State ---
   const [vocab, setVocab] = useState<Word[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'dash' | 'browse' | 'flash' | 'quiz' | 'saved' | 'proverbs' | 'phrases'>('browse');
+  const [view, setView] = useState<'dash' | 'browse' | 'flash' | 'quiz' | 'saved' | 'proverbs' | 'phrases' | 'verbs'>('browse');
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('theme');
@@ -1288,18 +1690,50 @@ export default function App() {
   const [isNavVisible, setIsNavVisible] = useState(true);
   const [proverbIdx, setProverbIdx] = useState(() => Number(localStorage.getItem('hscProverbIdx') || '0'));
   const [phraseIdx, setPhraseIdx] = useState(() => Number(localStorage.getItem('hscPhraseIdx') || '0'));
+  const [verbIdx, setVerbIdx] = useState(() => Number(localStorage.getItem('hscVerbIdx') || '0'));
 
   // --- Persistence ---
-  const [progress, setProgress] = useState<ProgressData>(() => JSON.parse(localStorage.getItem('hscProgress') || '{}'));
-  const [starred, setStarred] = useState<Record<string, boolean>>(() => JSON.parse(localStorage.getItem('hscStarred') || '{}'));
-  const [srsData, setSrsData] = useState<SRSData>(() => JSON.parse(localStorage.getItem('hscSRS') || '{}'));
-  const [dailyLog, setDailyLog] = useState<DailyLog>(() => JSON.parse(localStorage.getItem('hscDaily') || '{}'));
-  const [recentQuestions, setRecentQuestions] = useState<string[]>(() => JSON.parse(localStorage.getItem('hscRecent') || '[]'));
+  const [progress, setProgress] = useState<ProgressData>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('hscProgress') || '{}') || {};
+    } catch { return {}; }
+  });
+  const [starred, setStarred] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('hscStarred') || '{}') || {};
+    } catch { return {}; }
+  });
+  const [srsData, setSrsData] = useState<SRSData>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('hscSRS') || '{}') || {};
+    } catch { return {}; }
+  });
+  const [dailyLog, setDailyLog] = useState<DailyLog>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('hscDaily') || '{}') || {};
+    } catch { return {}; }
+  });
+  const [recentQuestions, setRecentQuestions] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('hscRecent') || '[]') || [];
+    } catch { return []; }
+  });
+  const [customSubCategoryOrder, setCustomSubCategoryOrder] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('hscSubOrder') || '[]') || [];
+    } catch { return []; }
+  });
   const [hasLoadedFromCloud, setHasLoadedFromCloud] = useState(false);
+  const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
+  const lastSyncedStateRef = useRef<string>('');
+  const quotaTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // --- Firestore Sync ---
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      setHasLoadedFromCloud(false);
+      return;
+    }
 
     const userDocRef = doc(db, 'users', user.uid);
     
@@ -1307,23 +1741,61 @@ export default function App() {
     const unsubscribe = onSnapshot(userDocRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.data();
-        if (data.progress) setProgress(data.progress);
-        if (data.starred) setStarred(data.starred);
-        if (data.srs) setSrsData(data.srs);
-        if (data.dailyLog) setDailyLog(data.dailyLog);
-        if (data.recent) setRecentQuestions(data.recent);
+        
+        // Only update state if cloud data differs from current state to prevent loops
+        setProgress(prev => {
+          const next = data.progress || {};
+          return JSON.stringify(prev) !== JSON.stringify(next) ? next : prev;
+        });
+        setStarred(prev => {
+          const next = data.starred || {};
+          return JSON.stringify(prev) !== JSON.stringify(next) ? next : prev;
+        });
+        setSrsData(prev => {
+          const next = data.srs || {};
+          return JSON.stringify(prev) !== JSON.stringify(next) ? next : prev;
+        });
+        setDailyLog(prev => {
+          const next = data.dailyLog || {};
+          return JSON.stringify(prev) !== JSON.stringify(next) ? next : prev;
+        });
+        setRecentQuestions(prev => {
+          const next = data.recent || [];
+          return JSON.stringify(prev) !== JSON.stringify(next) ? next : prev;
+        });
+        setCustomSubCategoryOrder(prev => {
+          const next = data.subCategoryOrder || [];
+          return JSON.stringify(prev) !== JSON.stringify(next) ? next : prev;
+        });
       }
       setHasLoadedFromCloud(true);
     }, (error) => {
-      handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+      if (error instanceof Error && (error.message.includes('Quota exceeded') || error.message.includes('resource-exhausted'))) {
+        setIsQuotaExceeded(true);
+        setHasLoadedFromCloud(true); // Don't block UI if quota hit during initial load
+      } else {
+        handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+      }
     });
 
     return () => unsubscribe();
   }, [user]);
 
-  // Push changes to cloud (Throttled via useEffect dependencies)
+  // Push changes to cloud with debounce
   useEffect(() => {
-    if (!user || !hasLoadedFromCloud) return;
+    if (!user || !hasLoadedFromCloud || isQuotaExceeded) return;
+
+    const currentState = JSON.stringify({ 
+      progress, 
+      starred, 
+      srs: srsData, 
+      dailyLog, 
+      recent: recentQuestions, 
+      subCategoryOrder: customSubCategoryOrder 
+    });
+
+    // Don't sync if data hasn't changed since last successful sync
+    if (currentState === lastSyncedStateRef.current) return;
 
     const syncToCloud = async () => {
       try {
@@ -1334,16 +1806,42 @@ export default function App() {
           srs: srsData,
           dailyLog,
           recent: recentQuestions,
-          updatedAt: new Date().toISOString()
+          subCategoryOrder: customSubCategoryOrder,
+          updatedAt: serverTimestamp()
         }, { merge: true });
+        
+        lastSyncedStateRef.current = currentState;
+        setIsQuotaExceeded(false); // Reset if successful
       } catch (error) {
+        // If quota is hit, we still have local storage as fallback
+        if (error instanceof Error && (error.message.includes('Quota exceeded') || error.message.includes('resource-exhausted'))) {
+          console.warn('Firestore write quota exceeded. Pausing sync for 30m.');
+          setIsQuotaExceeded(true);
+          if (quotaTimeoutRef.current) clearTimeout(quotaTimeoutRef.current);
+          quotaTimeoutRef.current = setTimeout(() => setIsQuotaExceeded(false), 30 * 60 * 1000);
+          return;
+        }
         handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
       }
     };
 
-    const timeout = setTimeout(syncToCloud, 2000); // 2s debounce
+    const timeout = setTimeout(syncToCloud, 30000); // 30s debounce to save quota
     return () => clearTimeout(timeout);
-  }, [user, progress, starred, srsData, dailyLog, recentQuestions, hasLoadedFromCloud]);
+  }, [user, progress, starred, srsData, dailyLog, recentQuestions, customSubCategoryOrder, hasLoadedFromCloud, isQuotaExceeded]);
+
+  // Update hash when cloud data is initially loaded
+  useEffect(() => {
+    if (hasLoadedFromCloud && !isQuotaExceeded) {
+      lastSyncedStateRef.current = JSON.stringify({ 
+        progress, 
+        starred, 
+        srs: srsData, 
+        dailyLog, 
+        recent: recentQuestions, 
+        subCategoryOrder: customSubCategoryOrder 
+      });
+    }
+  }, [hasLoadedFromCloud, isQuotaExceeded]);
 
   useEffect(() => {
     localStorage.setItem('hscRecent', JSON.stringify(recentQuestions));
@@ -1366,10 +1864,15 @@ export default function App() {
   const [selectedSubCategory, setSelectedSubCategory] = useState('');
   const [browseLevel, setBrowseLevel] = useState<'main' | 'sub' | 'questions'>('main');
   const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [sortBy, setSortBy] = useState<'default' | 'alpha' | 'sn' | 'sub'>('default');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
   const [browseFontSize, setBrowseFontSize] = useState(20);
   const [isSearchExpanded, setIsSearchExpanded] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('hscSubOrder', JSON.stringify(customSubCategoryOrder));
+  }, [customSubCategoryOrder]);
 
   // Reset page when filters change
   useEffect(() => {
@@ -1401,11 +1904,11 @@ export default function App() {
         const parsed = Papa.parse(csvText, { header: false }).data as string[][];
         
         // Remove header row and map to Word objects
-        const words: Word[] = parsed.slice(1).filter(row => (row[1] && row[2]) || (row[6] && row[7]) || (row[8] && row[9])).map(row => {
+        const words: Word[] = parsed.slice(1).filter(row => (row[1] && row[2]) || (row[6] && row[7]) || (row[8] && row[9]) || (row[14] && row[16])).map(row => {
           return {
             sn: row[0],
-            question: (row[1] || row[6] || row[8] || `ITEM-${row[0]}`).trim(), 
-            answer: (row[2] || row[7] || row[9] || '').trim(),
+            question: (row[1] || row[6] || row[8] || row[14] || `ITEM-${row[0]}`).trim(), 
+            answer: (row[2] || row[7] || row[9] || row[16] || '').trim(),
             mainCategory: row[3] || 'General',
             subCategory: row[4] || 'General',
             category: row[3] || 'General', 
@@ -1417,7 +1920,13 @@ export default function App() {
             phraseMeaningEn: row[10] || '',
             phraseMeaningBn: row[11] || '',
             phraseExEn: row[12] || '',
-            phraseExBn: row[13] || ''
+            phraseExBn: row[13] || '',
+            verbEn: row[14] || '',
+            verbPron: row[15] || '',
+            verbMeaningBn: row[16] || '',
+            verbForms: row[17] || '',
+            verbExEn: row[18] || '',
+            verbExBn: row[19] || ''
           };
         });
         
@@ -1465,6 +1974,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('hscPhraseIdx', phraseIdx.toString());
   }, [phraseIdx]);
+
+  useEffect(() => {
+    localStorage.setItem('hscVerbIdx', verbIdx.toString());
+  }, [verbIdx]);
 
   // --- Helper Functions ---
   const toggleStarred = (id: string) => {
@@ -1584,8 +2097,20 @@ export default function App() {
     const subset = selectedMainCategory 
       ? vocab.filter(v => v.mainCategory === selectedMainCategory)
       : vocab;
-    return Array.from(new Set(subset.map(v => v.subCategory))).sort();
-  }, [vocab, selectedMainCategory]);
+    const base = Array.from(new Set(subset.map(v => v.subCategory))).sort() as string[];
+    
+    if (customSubCategoryOrder.length > 0) {
+      return [...base].sort((a: string, b: string) => {
+        const idxA = customSubCategoryOrder.indexOf(a);
+        const idxB = customSubCategoryOrder.indexOf(b);
+        if (idxA === -1 && idxB === -1) return a.localeCompare(b);
+        if (idxA === -1) return 1;
+        if (idxB === -1) return -1;
+        return idxA - idxB;
+      });
+    }
+    return base;
+  }, [vocab, selectedMainCategory, customSubCategoryOrder]);
   
   const filteredVocab = useMemo(() => {
     const list = vocab.filter(v => {
@@ -1601,13 +2126,50 @@ export default function App() {
       return matchesSearch && matchesMainCat && matchesSubCat && matchesStatus;
     });
 
-    // Sort: Mastered words ('mastered') move to the bottom
+    // Sort: Mastered words ('mastered') move to the bottom, then by user selected option
     return [...list].sort((a, b) => {
       const statusA = progress[a.question] === 'mastered' ? 1 : 0;
       const statusB = progress[b.question] === 'mastered' ? 1 : 0;
-      return statusA - statusB;
+      
+      if (statusA !== statusB) return statusA - statusB;
+
+      if (sortBy === 'alpha') {
+        return a.question.localeCompare(b.question);
+      }
+      if (sortBy === 'sn') {
+        return (parseInt(a.sn) || 0) - (parseInt(b.sn) || 0);
+      }
+      if (sortBy === 'sub') {
+        return a.subCategory.localeCompare(b.subCategory);
+      }
+      
+      return 0; // Default: sheet order
     });
-  }, [vocab, searchQuery, selectedMainCategory, selectedSubCategory, selectedStatus, progress, starred]);
+  }, [vocab, searchQuery, selectedMainCategory, selectedSubCategory, selectedStatus, progress, starred, sortBy]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      setCustomSubCategoryOrder((items) => {
+        const currentList = items.length > 0 ? items : subCategories;
+        const oldIndex = currentList.indexOf(active.id as string);
+        const newIndex = currentList.indexOf(over.id as string);
+        if (oldIndex === -1 || newIndex === -1) return currentList;
+        return arrayMove(currentList, oldIndex, newIndex);
+      });
+    }
+  };
 
   const paginatedVocab = filteredVocab.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const totalPages = Math.ceil(filteredVocab.length / pageSize);
@@ -1668,6 +2230,7 @@ export default function App() {
                 <HeaderNavItem id="flash" icon={<Library size={16} />} label="Flashcards" currentView={view} setView={setView} />
                 <HeaderNavItem id="proverbs" icon={<Sparkles size={16} />} label="Proverbs" currentView={view} setView={setView} />
                 <HeaderNavItem id="phrases" icon={<TrendingUp size={16} />} label="Phrases" currentView={view} setView={setView} />
+                <HeaderNavItem id="verbs" icon={<RotateCw size={16} />} label="Verbs" currentView={view} setView={setView} />
                 <HeaderNavItem id="quiz" icon={<Zap size={16} />} label="Quiz" currentView={view} setView={setView} />
                 <HeaderNavItem id="saved" icon={<Star size={16} />} label="Review" currentView={view} setView={setView} />
               </nav>
@@ -1745,16 +2308,23 @@ export default function App() {
                     "hidden md:flex items-center gap-2 pr-3 pl-1 h-9 rounded-xl transition-all text-[10px] font-black uppercase",
                     view === 'profile' 
                       ? "bg-blue-600 text-white shadow-lg shadow-blue-500/30" 
-                      : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                      : (isQuotaExceeded 
+                          ? "bg-amber-50 dark:bg-amber-900/20 text-amber-600 border border-amber-200 dark:border-amber-800" 
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700")
                   )}
                 >
-                  <img 
-                    src={user.photoURL || ''} 
-                    className="w-7 h-7 rounded-lg border-2 border-white/20" 
-                    referrerPolicy="no-referrer"
-                    alt=""
-                  />
-                  <span>Profile</span>
+                  <div className="relative">
+                    <img 
+                      src={user.photoURL || ''} 
+                      className="w-7 h-7 rounded-lg border-2 border-white/20" 
+                      referrerPolicy="no-referrer"
+                      alt=""
+                    />
+                    {isQuotaExceeded && (
+                      <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 border-2 border-white dark:border-slate-900 rounded-full animate-pulse" />
+                    )}
+                  </div>
+                  <span>{isQuotaExceeded ? "Sync Paused" : "Profile"}</span>
                 </button>
               )}
 
@@ -1879,43 +2449,67 @@ export default function App() {
                    </div>
                  )}
 
-                  {/* Search (Fills space or fixed % on PC) */}
-                 <div className="hidden md:block flex-1 relative">
-                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={16} />
-                   <input 
-                    type="text" 
-                    placeholder="Search all words..."
-                    className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm text-sm dark:placeholder:text-slate-600"
-                    value={searchQuery}
-                    onChange={(e) => { 
-                      setSearchQuery(e.target.value); 
-                      if (e.target.value && browseLevel !== 'questions') {
-                        // Keep current browse level but search will filter the card view if we render it
-                      }
-                      setCurrentPage(1); 
-                    }}
-                   />
-                 </div>
+                  <div className="hidden md:block flex-1 relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={16} />
+                    <input 
+                     type="text" 
+                     placeholder="Search words..."
+                     className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition shadow-sm text-sm dark:placeholder:text-slate-600"
+                     value={searchQuery}
+                     onChange={(e) => { 
+                       setSearchQuery(e.target.value); 
+                       setCurrentPage(1); 
+                     }}
+                    />
+                  </div>
 
-                 {/* Filters Row (70% Status, 30% Font on Mobile) */}
-                 <div className="flex gap-2 w-full md:w-auto">
-                    {/* Status Filter (15% on PC, 70% on mobile) */}
-                    <div className="flex-[0.7] md:flex-none md:w-[150px]">
-                      <select 
-                        className="w-full px-3 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-xs outline-none shadow-sm cursor-pointer hover:border-blue-500 transition"
-                        value={selectedStatus}
-                        onChange={(e) => { setSelectedStatus(e.target.value); setCurrentPage(1); }}
-                      >
-                        <option value="">All Status</option>
-                        <option value="new">New</option>
-                        <option value="mastered">Mastered</option>
-                        <option value="review">Review</option>
-                      </select>
-                    </div>
+                  <div className="flex flex-wrap gap-2 w-full md:w-auto items-center">
+                     {/* Sub-Category Filter (Contextual) */}
+                     {browseLevel === 'questions' && subCategories.length > 1 && !searchQuery && (
+                       <div className="flex-1 md:flex-none md:w-[160px]">
+                         <select 
+                           className="w-full px-3 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-xs outline-none shadow-sm cursor-pointer hover:border-emerald-500 transition border-emerald-50 text-emerald-700 dark:text-emerald-400"
+                           value={selectedSubCategory}
+                           onChange={(e) => { setSelectedSubCategory(e.target.value); setCurrentPage(1); }}
+                         >
+                           {subCategories.map(sub => (
+                             <option key={sub} value={sub}>{sub}</option>
+                           ))}
+                         </select>
+                       </div>
+                     )}
 
-                    {/* Font Size (10% on PC, 30% on mobile) */}
-                    <div className="flex-[0.3] md:flex-none md:w-[100px] flex items-center justify-between px-2 bg-white dark:bg-slate-900 h-[46px] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
-                      <button 
+                     {/* Sort Filter */}
+                     <div className="flex-1 md:flex-none md:w-[130px]">
+                       <select 
+                         className="w-full px-3 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-xs outline-none shadow-sm cursor-pointer hover:border-blue-500 transition"
+                         value={sortBy}
+                         onChange={(e) => { setSortBy(e.target.value as any); setCurrentPage(1); }}
+                       >
+                         <option value="default">Default Sort</option>
+                         <option value="alpha">Alphabetical</option>
+                         <option value="sn">Serial No (SN)</option>
+                         <option value="sub">Sub Category</option>
+                       </select>
+                     </div>
+
+                     {/* Status Filter */}
+                     <div className="flex-1 md:flex-none md:w-[130px]">
+                       <select 
+                         className="w-full px-3 py-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-bold text-xs outline-none shadow-sm cursor-pointer hover:border-blue-500 transition"
+                         value={selectedStatus}
+                         onChange={(e) => { setSelectedStatus(e.target.value); setCurrentPage(1); }}
+                       >
+                         <option value="">All Status</option>
+                         <option value="new">New</option>
+                         <option value="mastered">Mastered</option>
+                         <option value="review">Saved</option>
+                       </select>
+                     </div>
+
+                     {/* Font Size */}
+                     <div className="flex-[0.3] md:flex-none md:w-[100px] flex items-center justify-between px-2 bg-white dark:bg-slate-900 h-[46px] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                       <button 
                         onClick={() => setBrowseFontSize(s => Math.max(10, s - 2))}
                         className="p-1 hover:text-blue-500"
                       >
@@ -1944,6 +2538,8 @@ export default function App() {
               setView={setView}
               setSearchQuery={setSearchQuery}
               mainCategories={mainCategories}
+              setBrowseLevel={setBrowseLevel}
+              setSelectedMainCategory={setSelectedMainCategory}
             />
           )}
           {view === 'browse' && (
@@ -1952,27 +2548,86 @@ export default function App() {
               {/* --- Drill Down Navigation --- */}
               {!searchQuery && browseLevel === 'main' && (
                 <div className="space-y-6">
-                  <div className="flex items-center gap-3 px-2">
-                    <div className="w-1 h-6 bg-blue-600 rounded-full" />
-                    <h2 className="text-xl font-black text-slate-800 dark:text-white">Choose a Main Category</h2>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2">
+                    <div className="flex items-center gap-3">
+                      <div className="w-1 h-6 bg-blue-600 rounded-full" />
+                      <h2 className="text-xl font-black text-slate-800 dark:text-white">Choose a Main Category</h2>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        setSelectedMainCategory('');
+                        setBrowseLevel('sub');
+                      }}
+                      className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all border border-transparent hover:border-slate-300"
+                    >
+                      View All Sub-Categories
+                    </button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                     {mainCategories.map(cat => {
-                      const count = vocab.filter(v => v.mainCategory === cat).length;
+                      const catWords = vocab.filter(v => v.mainCategory === cat);
+                      const count = catWords.length;
+                      const completedCount = catWords.filter(v => progress[v.question] === 'mastered').length;
+                      const isCompleted = count > 0 && completedCount === count;
+                      const progressPct = count > 0 ? Math.round((completedCount / count) * 100) : 0;
+                      
                       return (
                         <button 
                           key={cat}
+                          id={`cat-${cat}`}
                           onClick={() => {
                             setSelectedMainCategory(cat);
                             setBrowseLevel('sub');
                           }}
-                          className="group relative bg-white dark:bg-slate-900 p-6 rounded-[24px] border border-slate-200 dark:border-slate-800 text-left transition-all hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/10 active:scale-[0.98]"
+                          className={cn(
+                            "group relative bg-white dark:bg-slate-900 p-6 pb-8 rounded-[24px] border transition-all active:scale-[0.98]",
+                            isCompleted 
+                              ? "border-emerald-500 dark:border-emerald-800 shadow-lg shadow-emerald-500/10 hover:border-emerald-600" 
+                              : "border-slate-200 dark:border-slate-800 hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/10"
+                          )}
                         >
                           <div className="flex flex-col gap-1">
-                            <span className="text-lg font-black text-slate-900 dark:text-white group-hover:text-blue-600 transition-colors">{cat}</span>
-                            <span className="text-xs font-bold text-slate-400 capitalize">{count} questions available</span>
+                            <span className={cn(
+                              "text-lg font-black transition-colors",
+                              isCompleted ? "text-emerald-600 dark:text-emerald-400" : "text-slate-900 dark:text-white group-hover:text-blue-600"
+                            )}>
+                              {cat}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-slate-400 capitalize">{count} questions available</span>
+                              {progressPct > 0 && (
+                                <span className={cn(
+                                  "text-xs font-black",
+                                  isCompleted ? "text-emerald-500" : "text-blue-500"
+                                )}>{progressPct}%</span>
+                              )}
+                            </div>
+                            {isCompleted && (
+                              <div className="flex items-center gap-1 mt-1">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                <span className="text-[10px] font-black uppercase tracking-tighter text-emerald-500">Mastered</span>
+                              </div>
+                            )}
                           </div>
-                          <div className="absolute right-6 top-1/2 -translate-y-1/2 w-10 h-10 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-300 group-hover:bg-blue-600 group-hover:text-white transition-all">
+
+                          {/* Progress Bar */}
+                          <div className="absolute bottom-4 left-6 right-6 h-1 bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden">
+                            <motion.div 
+                              initial={{ width: 0 }}
+                              animate={{ width: `${progressPct}%` }}
+                              className={cn(
+                                "h-full transition-all duration-500",
+                                isCompleted ? "bg-emerald-500" : "bg-blue-500"
+                              )}
+                            />
+                          </div>
+
+                          <div className={cn(
+                            "absolute right-6 top-1/2 -translate-y-1/2 w-10 h-10 rounded-full flex items-center justify-center transition-all",
+                            isCompleted 
+                              ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white"
+                              : "bg-slate-50 dark:bg-slate-800 text-slate-300 group-hover:bg-blue-600 group-hover:text-white"
+                          )}>
                              <ChevronRight size={20} />
                           </div>
                         </button>
@@ -1987,36 +2642,64 @@ export default function App() {
                   <div className="flex flex-col gap-1 px-2">
                     <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-blue-600">
                        <span onClick={() => { setBrowseLevel('main'); setSelectedMainCategory(''); }} className="cursor-pointer hover:underline">Categories</span>
-                       <ChevronRight size={10} />
-                       <span>{selectedMainCategory}</span>
+                       {selectedMainCategory && (
+                         <>
+                           <ChevronRight size={10} />
+                           <span>{selectedMainCategory}</span>
+                         </>
+                       )}
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="w-1 h-6 bg-blue-600 rounded-full" />
-                      <h2 className="text-xl font-black text-slate-800 dark:text-white">Choose a Sub Category</h2>
+                      <h2 className="text-xl font-black text-slate-800 dark:text-white">
+                        {selectedMainCategory ? 'Choose a Sub Category' : 'All Sub-Categories'}
+                      </h2>
+                      {customSubCategoryOrder.length > 0 && (
+                        <button 
+                          onClick={() => setCustomSubCategoryOrder([])}
+                          className="flex items-center gap-1.5 px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-blue-500 rounded-lg text-[9px] font-black uppercase tracking-tighter transition-colors"
+                          title="Reset manual order"
+                        >
+                          <RotateCcw size={10} />
+                          Reset Order
+                        </button>
+                      )}
                     </div>
+                    <p className="text-[10px] font-bold text-slate-400 mt-1 italic">Drag the handles to rearrange topics</p>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                    {subCategories.map(sub => {
-                      const count = vocab.filter(v => v.mainCategory === selectedMainCategory && v.subCategory === sub).length;
-                      return (
-                        <button 
-                          key={sub}
-                          onClick={() => {
-                            setSelectedSubCategory(sub);
-                            setBrowseLevel('questions');
-                          }}
-                          className="group relative bg-white dark:bg-slate-900 p-5 rounded-[20px] border border-slate-200 dark:border-slate-800 text-left transition-all hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/10 active:scale-[0.98]"
-                        >
-                          <div className="flex flex-col gap-1">
-                            <span className="text-base font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-600 transition-colors">{sub}</span>
-                            <span className="text-[10px] font-bold text-slate-400">{count} items</span>
-                          </div>
-                          <div className="absolute right-5 top-1/2 -translate-y-1/2 w-8 h-8 bg-slate-50 dark:bg-slate-800 rounded-full flex items-center justify-center text-slate-300 group-hover:bg-blue-600 group-hover:text-white transition-all">
-                             <ChevronRight size={16} />
-                          </div>
-                        </button>
-                      );
-                    })}
+                    <DndContext 
+                      sensors={sensors}
+                      collisionDetection={closestCenter}
+                      onDragEnd={handleDragEnd}
+                    >
+                      <SortableContext 
+                        items={subCategories}
+                        strategy={rectSortingStrategy}
+                      >
+                        {subCategories.map(sub => {
+                          const subWords = vocab.filter(v => v.subCategory === sub && (!selectedMainCategory || v.mainCategory === selectedMainCategory));
+                          const count = subWords.length;
+                          const completedCount = subWords.filter(v => progress[v.question] === 'mastered').length;
+                          const isCompleted = count > 0 && completedCount === count;
+                          const progressPct = count > 0 ? Math.round((completedCount / count) * 100) : 0;
+                          
+                          return (
+                            <SortableSubCategoryItem 
+                              key={sub}
+                              id={sub}
+                              count={count}
+                              isCompleted={isCompleted}
+                              progressPct={progressPct}
+                              onClick={() => {
+                                setSelectedSubCategory(sub);
+                                setBrowseLevel('questions');
+                              }}
+                            />
+                          );
+                        })}
+                      </SortableContext>
+                    </DndContext>
                   </div>
                 </div>
               )}
@@ -2028,8 +2711,12 @@ export default function App() {
                     <div className="flex flex-col gap-1 px-2 mb-4">
                       <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400">
                          <span onClick={() => { setBrowseLevel('main'); setSelectedMainCategory(''); setSelectedSubCategory(''); }} className="cursor-pointer hover:text-blue-600 transition-colors">Categories</span>
-                         <ChevronRight size={10} />
-                         <span onClick={() => { setBrowseLevel('sub'); setSelectedSubCategory(''); }} className="cursor-pointer hover:text-blue-600 transition-colors">{selectedMainCategory}</span>
+                         {selectedMainCategory && (
+                           <>
+                             <ChevronRight size={10} />
+                             <span onClick={() => { setBrowseLevel('sub'); setSelectedSubCategory(''); }} className="cursor-pointer hover:text-blue-600 transition-colors">{selectedMainCategory}</span>
+                           </>
+                         )}
                          <ChevronRight size={10} />
                          <span className="text-blue-600">{selectedSubCategory}</span>
                       </div>
@@ -2245,6 +2932,19 @@ export default function App() {
               searchChatGPT={searchChatGPT}
             />
           )}
+          {view === 'verbs' && (
+            <VerbsView 
+              vocab={vocab}
+              verbIdx={verbIdx}
+              setVerbIdx={setVerbIdx}
+              speak={speak}
+              starred={starred}
+              toggleStarred={toggleStarred}
+              triggerHapticFeedback={triggerHapticFeedback}
+              autoRead={autoRead}
+              searchChatGPT={searchChatGPT}
+            />
+          )}
           {view === 'saved' && (
             <div className="max-w-5xl mx-auto space-y-6">
                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2">
@@ -2311,6 +3011,7 @@ export default function App() {
           <MobileNavItem id="flash" icon={<Library size={20} />} view={view} setView={setView} label="Flash" />
           <MobileNavItem id="proverbs" icon={<Sparkles size={20} />} view={view} setView={setView} label="Wisdom" />
           <MobileNavItem id="phrases" icon={<TrendingUp size={20} />} view={view} setView={setView} label="Phrases" />
+          <MobileNavItem id="verbs" icon={<RotateCw size={20} />} view={view} setView={setView} label="Verbs" />
           <MobileNavItem id="quiz" icon={<Zap size={20} />} view={view} setView={setView} label="Quiz" />
           <MobileNavItem id="saved" icon={<Star size={20} />} view={view} setView={setView} label="Review" />
         </footer>
@@ -2328,6 +3029,94 @@ export default function App() {
     </div>
   </div>
 );
+}
+
+function SortableSubCategoryItem({ id, count, isCompleted, progressPct, onClick }: { id: string, count: number, isCompleted: boolean, progressPct: number, onClick: () => void, key?: any }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      className={cn(
+        "group relative bg-white dark:bg-slate-900 p-5 pb-7 rounded-[20px] border transition-all active:scale-[0.98]",
+        isCompleted 
+          ? "border-emerald-500 dark:border-emerald-800 shadow-lg shadow-emerald-500/10 hover:border-emerald-600" 
+          : "border-slate-200 dark:border-slate-800 hover:border-blue-500 hover:shadow-xl hover:shadow-blue-500/10",
+        isDragging ? "shadow-2xl ring-2 ring-blue-500 border-transparent opacity-50 cursor-grabbing" : "cursor-default"
+      )}
+    >
+      <div 
+        onClick={onClick}
+        className="flex flex-col gap-1 cursor-pointer pr-10"
+      >
+        <span className={cn(
+          "text-base font-bold transition-colors line-clamp-1",
+          isCompleted ? "text-emerald-600 dark:text-emerald-400" : "text-slate-800 dark:text-slate-200 group-hover:text-blue-600"
+        )}>
+          {id}
+        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-bold text-slate-400">{count} items</span>
+          {progressPct > 0 && (
+            <span className={cn(
+              "text-[10px] font-black",
+              isCompleted ? "text-emerald-500" : "text-blue-500"
+            )}>{progressPct}%</span>
+          )}
+        </div>
+        {isCompleted && (
+          <div className="flex items-center gap-1 mt-0.5">
+            <div className="w-1 h-1 rounded-full bg-emerald-500" />
+            <span className="text-[8px] font-black uppercase tracking-tighter text-emerald-500">Topic Done</span>
+          </div>
+        )}
+      </div>
+
+      {/* Progress Bar */}
+      <div className="absolute bottom-3 left-5 right-5 h-1 bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden">
+        <motion.div 
+          initial={{ width: 0 }}
+          animate={{ width: `${progressPct}%` }}
+          className={cn(
+            "h-full transition-all duration-500",
+            isCompleted ? "bg-emerald-500" : "bg-blue-500"
+          )}
+        />
+      </div>
+      
+      {/* Drag Handle */}
+      <div 
+        {...listeners}
+        className={cn(
+          "absolute right-5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-grab active:cursor-grabbing shadow-sm",
+          isCompleted
+            ? "bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 hover:bg-emerald-600 hover:text-white"
+            : "bg-slate-50 dark:bg-slate-800 text-slate-300 hover:bg-blue-600 hover:text-white"
+        )}
+      >
+        <div className="flex flex-col gap-0.5">
+           <div className="w-3 h-0.5 bg-current rounded-full" />
+           <div className="w-3 h-0.5 bg-current rounded-full" />
+           <div className="w-3 h-0.5 bg-current rounded-full" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function WordCard({ 

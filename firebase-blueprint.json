@@ -27,6 +27,7 @@
         },
         "updatedAt": {
           "type": "string",
+          "format": "date-time",
           "description": "Last sync timestamp"
         }
       }

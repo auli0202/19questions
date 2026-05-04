@@ -30,14 +30,13 @@ service cloud.firestore {
     // --- Validation Blueprints ---
     function isValidUserProgress(data) {
       return data.keys().hasAll(['starred', 'progress', 'srs', 'dailyLog', 'recent', 'updatedAt'])
-        && data.keys().size() == 6
         && data.starred is map
         && data.progress is map
         && data.srs is map
         && data.dailyLog is map
         && data.recent is list
         && data.recent.size() <= 100
-        && data.updatedAt is string;
+        && (data.updatedAt is timestamp || data.updatedAt is string); // Allow string for flexibility during transition
     }
 
     // --- Collection: Users ---
@@ -48,18 +47,22 @@ service cloud.firestore {
       // 2. Validation Blueprint (Anti-Update-Gap)
       allow create: if isOwner(userId) 
         && isValidId(userId)
+        && request.auth.token.email_verified == true
         && isValidUserProgress(incoming());
 
       // 4. Tiered Identity & Action-Based Update
       allow update: if isOwner(userId)
         && isValidId(userId)
+        && request.auth.token.email_verified == true
         && isValidUserProgress(incoming())
-        && (
-          // Action: Full State Sync
-          incoming().diff(existing()).affectedKeys().hasOnly(['starred', 'progress', 'srs', 'dailyLog', 'recent', 'updatedAt'])
-        );
+        && incoming().diff(existing()).affectedKeys().hasOnly(['starred', 'progress', 'srs', 'dailyLog', 'recent', 'updatedAt']);
 
-      allow delete: if false; // Users cannot delete their data through the client for now
+      allow delete: if false;
+    }
+
+    // Test connection
+    match /test/connection {
+      allow read: if true;
     }
   }
 }
