@@ -3369,48 +3369,46 @@ function WordCard({
                       <h4 className="text-[11px] font-black uppercase tracking-widest text-purple-600 dark:text-purple-400">AI Explanation (NTRCA Style)</h4>
                     </div>
                     
-                    <p className="font-bengali text-lg text-slate-700 dark:text-slate-200 leading-relaxed font-semibold mb-6">
+                    <p className="font-bengali text-base text-slate-700 dark:text-slate-200 leading-relaxed font-medium mb-5">
                       {aiResult.explanation}
                     </p>
 
                     {aiResult.examInsights && (
-                      <div className="mb-6 p-4 bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30 rounded-xl">
-                        <div className="flex items-center gap-2 mb-3">
-                          <Info size={16} className="text-amber-600 dark:text-amber-400" />
-                          <h4 className="text-[11px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">Competitive Exam Insights</h4>
+                      <div className="mb-5 p-3.5 bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30 rounded-xl">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Info size={14} className="text-amber-600 dark:text-amber-400" />
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">Competitive Exam Insights</h4>
                         </div>
-                        <p className="font-bengali text-base text-slate-700 dark:text-slate-200 leading-relaxed font-medium">
+                        <p className="font-bengali text-base text-slate-600 dark:text-slate-300 leading-relaxed font-medium">
                           {aiResult.examInsights}
                         </p>
                       </div>
                     )}
 
                     {aiResult.relatedWords && aiResult.relatedWords.length > 0 && (
-                      <div className="mb-6">
-                        <div className="flex items-center gap-2 mb-4">
-                          <BookOpen size={16} className="text-blue-500" />
-                          <h4 className="text-[11px] font-black uppercase tracking-widest text-slate-400">Important Related Vocabulary</h4>
+                      <div className="mb-5">
+                        <div className="flex items-center gap-2 mb-3">
+                          <BookOpen size={14} className="text-blue-500" />
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Important Related Vocabulary</h4>
                         </div>
-                        <div className="grid grid-cols-1 gap-2.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {aiResult.relatedWords.map((item, i) => (
-                            <div key={i} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800/60 shadow-sm">
-                              <span className="text-sm font-black text-slate-800 dark:text-slate-100">{item.en}</span>
-                              <div className="flex items-center gap-3">
-                                <span className="text-xs text-slate-300">→</span>
-                                <span className="font-bengali text-sm text-blue-600 dark:text-blue-400 font-bold">{item.bn}</span>
-                              </div>
+                            <div key={i} className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800/40 rounded-lg border border-slate-100 dark:border-slate-800/60">
+                              <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{item.en}</span>
+                              <span className="text-[10px] text-slate-400 mx-1">→</span>
+                              <span className="font-bengali text-sm text-blue-600 dark:text-blue-400 font-medium">{item.bn}</span>
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
 
-                    <div className="space-y-5">
-                      <div className="text-[11px] font-black uppercase text-slate-400 tracking-tighter">Usage Examples</div>
+                    <div className="space-y-4">
+                      <div className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Usage Examples</div>
                       {aiResult.examples.map((ex, i) => (
-                        <div key={i} className="pl-5 border-l-3 border-purple-200 dark:border-purple-800 space-y-2">
-                          <p className="text-base font-bold text-slate-800 dark:text-slate-100 leading-snug">{ex.en}</p>
-                          <p className="font-bengali text-base text-purple-600 dark:text-purple-400 font-semibold">{ex.bn}</p>
+                        <div key={i} className="pl-4 border-l-2 border-purple-200 dark:border-purple-800 space-y-1.5">
+                          <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{ex.en}</p>
+                          <p className="font-bengali text-sm text-purple-600 dark:text-purple-400 font-medium">{ex.bn}</p>
                         </div>
                       ))}
                     </div>
