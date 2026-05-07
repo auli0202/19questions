@@ -1725,6 +1725,11 @@ export default function App() {
       return JSON.parse(localStorage.getItem('hscSubOrder') || '[]') || [];
     } catch { return []; }
   });
+  const [aiExplanations, setAiExplanations] = useState<Record<string, AIExplanation>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('hscAiExplanations') || '{}') || {};
+    } catch { return {}; }
+  });
   const [hasLoadedFromCloud, setHasLoadedFromCloud] = useState(false);
   const [isQuotaExceeded, setIsQuotaExceeded] = useState(false);
   const lastSyncedStateRef = useRef<string>('');
@@ -1769,6 +1774,10 @@ export default function App() {
           const next = data.subCategoryOrder || [];
           return JSON.stringify(prev) !== JSON.stringify(next) ? next : prev;
         });
+        setAiExplanations(prev => {
+          const next = data.aiExplanations || {};
+          return JSON.stringify(prev) !== JSON.stringify(next) ? next : prev;
+        });
       }
       setHasLoadedFromCloud(true);
     }, (error) => {
@@ -1793,7 +1802,8 @@ export default function App() {
       srs: srsData, 
       dailyLog, 
       recent: recentQuestions, 
-      subCategoryOrder: customSubCategoryOrder 
+      subCategoryOrder: customSubCategoryOrder,
+      aiExplanations
     });
 
     // Don't sync if data hasn't changed since last successful sync
@@ -1809,6 +1819,7 @@ export default function App() {
           dailyLog,
           recent: recentQuestions,
           subCategoryOrder: customSubCategoryOrder,
+          aiExplanations,
           updatedAt: serverTimestamp()
         }, { merge: true });
         
@@ -1827,9 +1838,9 @@ export default function App() {
       }
     };
 
-    const timeout = setTimeout(syncToCloud, 30000); // 30s debounce to save quota
+    const timeout = setTimeout(syncToCloud, 5000); // 5s debounce for better persistence
     return () => clearTimeout(timeout);
-  }, [user, progress, starred, srsData, dailyLog, recentQuestions, customSubCategoryOrder, hasLoadedFromCloud, isQuotaExceeded]);
+  }, [user, progress, starred, srsData, dailyLog, recentQuestions, customSubCategoryOrder, aiExplanations, hasLoadedFromCloud, isQuotaExceeded]);
 
   // Update hash when cloud data is initially loaded
   useEffect(() => {
@@ -1840,7 +1851,8 @@ export default function App() {
         srs: srsData, 
         dailyLog, 
         recent: recentQuestions, 
-        subCategoryOrder: customSubCategoryOrder 
+        subCategoryOrder: customSubCategoryOrder,
+        aiExplanations
       });
     }
   }, [hasLoadedFromCloud, isQuotaExceeded]);
@@ -1853,11 +1865,19 @@ export default function App() {
     localStorage.setItem('hscStarred', JSON.stringify(starred));
   }, [starred]);
 
+  useEffect(() => {
+    localStorage.setItem('hscAiExplanations', JSON.stringify(aiExplanations));
+  }, [aiExplanations]);
+
   const addToRecent = useCallback((q: string) => {
     setRecentQuestions(prev => {
       const filtered = prev.filter(item => item !== q);
       return [q, ...filtered].slice(0, 10);
     });
+  }, []);
+
+  const saveAiExplanation = useCallback((id: string, explanation: AIExplanation) => {
+    setAiExplanations(prev => ({ ...prev, [id]: explanation }));
   }, []);
 
   // --- Filter State ---
@@ -2725,7 +2745,7 @@ export default function App() {
                     </div>
                   )}
 
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 gap-6">
                     {paginatedVocab.map((w, idx) => (
                       <WordCard 
                         key={w.question + idx} 
@@ -2741,6 +2761,8 @@ export default function App() {
                         index={(currentPage - 1) * pageSize + idx + 1}
                         fontSize={browseFontSize}
                         addToRecent={addToRecent}
+                        setAiExplanation={saveAiExplanation}
+                        savedAiExplanation={aiExplanations[w.question]}
                       />
                     ))}
                   </div>
@@ -2807,6 +2829,8 @@ export default function App() {
                   speak={speak}
                   triggerHapticFeedback={triggerHapticFeedback}
                   addToRecent={addToRecent}
+                  setAiExplanation={saveAiExplanation}
+                  aiExplanations={aiExplanations}
                   isHeaderVisible={isHeaderVisible}
                   setIsHeaderVisible={setIsHeaderVisible}
                   isNavVisible={isNavVisible}
@@ -2978,7 +3002,7 @@ export default function App() {
                    </div>
                  )}
                </div>
-               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+               <div className="grid grid-cols-1 gap-6">
                   {vocab.filter(v => starred[v.question] && progress[v.question] !== 'mastered').map((w, idx) => (
                     <WordCard 
                       key={w.question + idx} 
@@ -2994,6 +3018,8 @@ export default function App() {
                       index={idx + 1}
                       fontSize={browseFontSize}
                       addToRecent={addToRecent}
+                      setAiExplanation={saveAiExplanation}
+                      savedAiExplanation={aiExplanations[w.question]}
                     />
                   ))}
                   {vocab.filter(v => starred[v.question] && progress[v.question] !== 'mastered').length === 0 && (
@@ -3133,7 +3159,9 @@ function WordCard({
   searchChatGPT,
   index,
   fontSize,
-  addToRecent
+  addToRecent,
+  setAiExplanation,
+  savedAiExplanation
 }: { 
   word: Word; 
   progress: ProgressData; 
@@ -3147,21 +3175,26 @@ function WordCard({
   index: number;
   fontSize?: number;
   addToRecent: (q: string) => void;
+  setAiExplanation: (id: string, explanation: AIExplanation) => void;
+  savedAiExplanation?: AIExplanation;
   key?: any;
 }) {
   const status = progress[word.question];
   const isStarred = starred[word.question];
   const [showAnswer, setShowAnswer] = useState(false);
-  const [aiResult, setAiResult] = useState<AIExplanation | null>(null);
+  const [aiResult, setAiResult] = useState<AIExplanation | null>(savedAiExplanation || null);
   const [isAiLoading, setIsAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
-  const handleAiExplain = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (aiResult) {
-      setAiResult(null); // Toggle off if already showing
-      return;
+  useEffect(() => {
+    if (savedAiExplanation) {
+      setAiResult(savedAiExplanation);
     }
+  }, [savedAiExplanation]);
+
+  const handleAiExplain = async (e: React.MouseEvent, isRegenerate = false) => {
+    e.stopPropagation();
+    if (aiResult && !isRegenerate) return;
     
     setIsAiLoading(true);
     setAiError(null);
@@ -3171,6 +3204,7 @@ function WordCard({
         category: word.category || word.subCategory 
       });
       setAiResult(result);
+      setAiExplanation(word.question, result);
     } catch (err) {
       setAiError("AI explanation failed. Please try again.");
       console.error(err);
@@ -3367,6 +3401,15 @@ function WordCard({
                         <Sparkles size={12} />
                       </div>
                       <h4 className="text-[11px] font-black uppercase tracking-widest text-purple-600 dark:text-purple-400">AI Explanation (NTRCA Style)</h4>
+                      
+                      <button 
+                        onClick={(e) => handleAiExplain(e, true)}
+                        disabled={isAiLoading}
+                        className="ml-auto p-1.5 hover:bg-purple-100 dark:hover:bg-purple-900/40 rounded-full text-purple-400 dark:text-purple-500 transition-colors group/regen"
+                        title="Regenerate"
+                      >
+                        <RotateCcw size={12} className={cn("transition-transform", isAiLoading ? "animate-spin" : "group-hover/regen:rotate-180")} />
+                      </button>
                     </div>
                     
                     <p className="font-bengali text-base text-slate-700 dark:text-slate-200 leading-relaxed font-medium mb-5">
@@ -3478,6 +3521,8 @@ function FlashcardSession({
   speak,
   triggerHapticFeedback,
   addToRecent,
+  setAiExplanation,
+  aiExplanations,
   isHeaderVisible,
   setIsHeaderVisible,
   isNavVisible,
@@ -3494,6 +3539,8 @@ function FlashcardSession({
   speak: (t: string, c?: boolean) => void;
   triggerHapticFeedback: (type?: 'light' | 'medium' | 'heavy') => void;
   addToRecent: (q: string) => void;
+  setAiExplanation: (id: string, explanation: AIExplanation) => void;
+  aiExplanations: Record<string, AIExplanation>;
   isHeaderVisible: boolean;
   setIsHeaderVisible: (v: boolean) => void;
   isNavVisible: boolean;
@@ -3506,6 +3553,9 @@ function FlashcardSession({
   const [selectedMain, setSelectedMain] = useState('');
   const [selectedSub, setSelectedSub] = useState('');
   const [fontSize, setFontSize] = useState(() => typeof window !== 'undefined' && window.innerWidth >= 768 ? 28 : 20); // Default size in px
+
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const mainCats = useMemo(() => Array.from(new Set(vocab.map(v => v.mainCategory))).sort(), [vocab]);
   const subCats = useMemo(() => {
@@ -3526,6 +3576,28 @@ function FlashcardSession({
   const current = session[idx];
   const status = current ? progress[current.question] : null;
   const isStarred = current ? starred[current.question] : false;
+  const savedAiExplanation = current ? aiExplanations[current.question] : undefined;
+
+  const handleAiExplain = async (e: React.MouseEvent, isRegenerate = false) => {
+    e.stopPropagation();
+    if (!current) return;
+    if (savedAiExplanation && !isRegenerate) return;
+    
+    setIsAiLoading(true);
+    setAiError(null);
+    try {
+      const result = await explainWord(current.question, { 
+        answer: current.answer, 
+        category: current.category || current.subCategory 
+      });
+      setAiExplanation(current.question, result);
+    } catch (err) {
+      setAiError("AI explanation failed. Please try again.");
+      console.error(err);
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
 
   // Speak when flipped (answer)
   const lastSpokenAnswer = useRef<string | null>(null);
@@ -3845,6 +3917,23 @@ function FlashcardSession({
 
                   <div className="flex flex-col gap-2 w-full max-w-[320px]">
                     <button 
+                      onClick={handleAiExplain}
+                      disabled={isAiLoading}
+                      className={cn(
+                        "w-full px-4 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition flex items-center justify-center gap-2 active:scale-95 shadow-lg",
+                        savedAiExplanation 
+                          ? "bg-purple-600 text-white shadow-purple-500/20" 
+                          : "bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 hover:bg-purple-600 hover:text-white"
+                      )}
+                    >
+                      {isAiLoading ? (
+                        <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <Sparkles size={14} />
+                      )}
+                      {savedAiExplanation ? 'AI Explained' : 'AI Explain'}
+                    </button>
+                    <button 
                       onClick={(e) => { e.stopPropagation(); toggleStarred(current.question); }}
                       className={cn(
                         "w-full px-4 py-3 rounded-2xl text-xs font-bold transition flex items-center justify-center gap-1 active:scale-95 shadow-lg",
@@ -3879,6 +3968,41 @@ function FlashcardSession({
                   >
                     Skip Card
                   </button>
+
+                  <AnimatePresence>
+                    {savedAiExplanation && (
+                      <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="w-full mt-6 space-y-4 text-left max-h-[200px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-purple-200"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="p-4 bg-purple-50 dark:bg-purple-900/10 rounded-[24px] border border-purple-100 dark:border-purple-800/30">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Sparkles size={14} className="text-purple-600" />
+                            <span className="text-[10px] font-black uppercase tracking-widest text-purple-600">AI Explanation</span>
+                            <button 
+                              onClick={(e) => handleAiExplain(e, true)}
+                              disabled={isAiLoading}
+                              className="ml-auto p-1 text-purple-400 hover:text-purple-600 transition"
+                            >
+                              <RotateCcw size={12} className={isAiLoading ? "animate-spin" : ""} />
+                            </button>
+                          </div>
+                          <p className="font-bengali text-sm text-slate-700 dark:text-slate-200 leading-relaxed font-medium">
+                            {savedAiExplanation.explanation}
+                          </p>
+                          {savedAiExplanation.examInsights && (
+                            <div className="mt-3 p-2.5 bg-amber-50/50 dark:bg-amber-900/10 rounded-xl border border-amber-100/50">
+                              <p className="font-bengali text-xs text-slate-600 dark:text-slate-300">
+                                {savedAiExplanation.examInsights}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
             </motion.div>

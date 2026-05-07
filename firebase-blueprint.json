@@ -29,6 +29,10 @@
           "type": "array",
           "description": "Custom order for subcategories"
         },
+        "aiExplanations": {
+          "type": "object",
+          "description": "Map of word IDs to stored AI explanation objects"
+        },
         "updatedAt": {
           "type": "string",
           "format": "date-time",
