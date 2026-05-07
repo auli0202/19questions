@@ -25,6 +25,10 @@
           "type": "array",
           "description": "Array of recently viewed word IDs"
         },
+        "subCategoryOrder": {
+          "type": "array",
+          "description": "Custom order for subcategories"
+        },
         "updatedAt": {
           "type": "string",
           "format": "date-time",

@@ -37,13 +37,15 @@ import {
   LogOut,
   Shield,
   Sparkles,
-  LayoutGrid
+  LayoutGrid,
+  Info
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Word, WordStatus, ProgressData, DailyLog, SRSData } from './types.ts';
 import { useAuth, db, handleFirestoreError, OperationType } from './lib/firebase';
 import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { explainWord, AIExplanation } from './lib/gemini';
 
 import {
   DndContext,
@@ -3150,6 +3152,32 @@ function WordCard({
   const status = progress[word.question];
   const isStarred = starred[word.question];
   const [showAnswer, setShowAnswer] = useState(false);
+  const [aiResult, setAiResult] = useState<AIExplanation | null>(null);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const handleAiExplain = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (aiResult) {
+      setAiResult(null); // Toggle off if already showing
+      return;
+    }
+    
+    setIsAiLoading(true);
+    setAiError(null);
+    try {
+      const result = await explainWord(word.question, { 
+        answer: word.answer, 
+        category: word.category || word.subCategory 
+      });
+      setAiResult(result);
+    } catch (err) {
+      setAiError("AI explanation failed. Please try again.");
+      console.error(err);
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
 
   const handleCardClick = () => {
     const selection = window.getSelection();
@@ -3289,6 +3317,24 @@ function WordCard({
                 <span className="text-[10px] font-bold text-slate-500 group-hover/btn:text-white">ChatGPT</span>
               </button>
 
+              <button 
+                onClick={handleAiExplain}
+                disabled={isAiLoading}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-2 border rounded-lg transition group/btn relative overflow-hidden",
+                  aiResult 
+                    ? "bg-purple-600 border-purple-500 text-white shadow-lg shadow-purple-500/20" 
+                    : "bg-purple-50 dark:bg-purple-900/20 border-purple-100 dark:border-purple-800/50 text-purple-600 dark:text-purple-400 hover:bg-purple-600 hover:text-white"
+                )}
+              >
+                {isAiLoading ? (
+                  <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Sparkles size={14} className={cn("transition-transform group-hover/btn:scale-110", aiResult ? "text-white" : "text-purple-500")} />
+                )}
+                <span className="text-[10px] font-black uppercase tracking-tight">AI Explain</span>
+              </button>
+
               <div className="ml-auto">
                 <button 
                   onClick={(e) => { e.stopPropagation(); toggleStarred(word.question); }}
@@ -3304,6 +3350,84 @@ function WordCard({
                 </button>
               </div>
             </div>
+
+            {/* AI Result Section */}
+            <AnimatePresence>
+              {aiResult && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="mt-4 pt-4 border-t border-purple-100 dark:border-purple-900/30 overflow-hidden"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="bg-purple-50/50 dark:bg-purple-900/10 rounded-xl p-4 border border-purple-100/50 dark:border-purple-800/20">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-6 h-6 rounded-full bg-purple-600 flex items-center justify-center text-white">
+                        <Sparkles size={12} />
+                      </div>
+                      <h4 className="text-[11px] font-black uppercase tracking-widest text-purple-600 dark:text-purple-400">AI Explanation (NTRCA Style)</h4>
+                    </div>
+                    
+                    <p className="font-bengali text-lg text-slate-700 dark:text-slate-200 leading-relaxed font-semibold mb-6">
+                      {aiResult.explanation}
+                    </p>
+
+                    {aiResult.examInsights && (
+                      <div className="mb-6 p-4 bg-amber-50/50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-800/30 rounded-xl">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Info size={16} className="text-amber-600 dark:text-amber-400" />
+                          <h4 className="text-[11px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400">Competitive Exam Insights</h4>
+                        </div>
+                        <p className="font-bengali text-base text-slate-700 dark:text-slate-200 leading-relaxed font-medium">
+                          {aiResult.examInsights}
+                        </p>
+                      </div>
+                    )}
+
+                    {aiResult.relatedWords && aiResult.relatedWords.length > 0 && (
+                      <div className="mb-6">
+                        <div className="flex items-center gap-2 mb-4">
+                          <BookOpen size={16} className="text-blue-500" />
+                          <h4 className="text-[11px] font-black uppercase tracking-widest text-slate-400">Important Related Vocabulary</h4>
+                        </div>
+                        <div className="grid grid-cols-1 gap-2.5">
+                          {aiResult.relatedWords.map((item, i) => (
+                            <div key={i} className="flex items-center justify-between p-3 bg-white dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800/60 shadow-sm">
+                              <span className="text-sm font-black text-slate-800 dark:text-slate-100">{item.en}</span>
+                              <div className="flex items-center gap-3">
+                                <span className="text-xs text-slate-300">→</span>
+                                <span className="font-bengali text-sm text-blue-600 dark:text-blue-400 font-bold">{item.bn}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-5">
+                      <div className="text-[11px] font-black uppercase text-slate-400 tracking-tighter">Usage Examples</div>
+                      {aiResult.examples.map((ex, i) => (
+                        <div key={i} className="pl-5 border-l-3 border-purple-200 dark:border-purple-800 space-y-2">
+                          <p className="text-base font-bold text-slate-800 dark:text-slate-100 leading-snug">{ex.en}</p>
+                          <p className="font-bengali text-base text-purple-600 dark:text-purple-400 font-semibold">{ex.bn}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+              {aiError && (
+                <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="mt-2 text-[10px] font-bold text-red-500 flex items-center gap-1"
+                >
+                    <X size={10} />
+                    {aiError}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         ) : null}
     </div>

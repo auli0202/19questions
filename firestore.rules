@@ -29,13 +29,15 @@ service cloud.firestore {
 
     // --- Validation Blueprints ---
     function isValidUserProgress(data) {
-      return data.keys().hasAll(['starred', 'progress', 'srs', 'dailyLog', 'recent', 'updatedAt'])
+      return data.keys().hasAll(['starred', 'progress', 'srs', 'dailyLog', 'recent', 'subCategoryOrder', 'updatedAt'])
         && data.starred is map
         && data.progress is map
         && data.srs is map
         && data.dailyLog is map
         && data.recent is list
         && data.recent.size() <= 100
+        && data.subCategoryOrder is list
+        && data.subCategoryOrder.size() <= 100
         && (data.updatedAt is timestamp || data.updatedAt is string); // Allow string for flexibility during transition
     }
 
@@ -55,7 +57,7 @@ service cloud.firestore {
         && isValidId(userId)
         && request.auth.token.email_verified == true
         && isValidUserProgress(incoming())
-        && incoming().diff(existing()).affectedKeys().hasOnly(['starred', 'progress', 'srs', 'dailyLog', 'recent', 'updatedAt']);
+        && incoming().diff(existing()).affectedKeys().hasOnly(['starred', 'progress', 'srs', 'dailyLog', 'recent', 'subCategoryOrder', 'updatedAt']);
 
       allow delete: if false;
     }
